@@ -1,6 +1,4 @@
 # Elixir
-Elixir + Elixir Express + Sorbnet
-Pozyskiwanie wiedzy domenowej 
 
 System Elixir + Elixir Express + system SORBNET3 
 
