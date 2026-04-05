@@ -1,10 +1,28 @@
-# Elixir
+## Elixir / Express Elixir / SORBNET
 
-System Elixir + Elixir Express + system SORBNET3 
+Projekt ma na celu odtworzenie architektury polskiego systemu rozliczeniowego w modelu 1:1:
 
-ELIXIR 
+- **Elixir** – system sesyjnego rozliczania przelewów detalicznych
+- **Express Elixir** – system płatności natychmiastowych
+- **SORBNET** – system RTGS do rozrachunku wysokokwotowego i final settlement
 
-System obsługujący detaliczne rozliczenia międzybankowe w Polsce. Banki mogą ustalać godziny przyjmowania zleceń płatniczych oraz manipulować terminami księgowania przychodzących płatności lub korzystać z gotowych terminów przygotowanych przez krajową izbę rozliczeń (KIR) która utrzymuje Elixir od 1994 roku. 
-Elixir działa tylko w dni robocze i jest podzielony na 3 sesje w ciągu doby, izba rozliczeniowa podsumowuje przychodzące i wychodzące z każdego z banków płatności i ustala tzw. pozycję netto każdego z uczestników. Jest to kwota, którą bank powinien przekazać (jeśli suma wychodzących płatności jest wyższa niż przychodzących) lub otrzymać (w odwrotnej sytuacji) od innych banków. 
+Projekt realizowany jest w architekturze **niemonomolitycznej (microservices/distributed services)**.
 
-Więcej informacji: [link]
+---
+
+Aby odpalic projekt, w konsoli należy wpisać ./start.bat
+
+---
+## Struktura projektu
+
+```text
+payment-system/
+│
+├── elixir/
+├── express-elixir/
+├── sorbnet/
+│
+├── docker-compose.yml
+├── start.bat
+├── stop.bat
+└── README.md
