@@ -8,7 +8,7 @@ Projekt ma na celu odtworzenie architektury polskiego systemu rozliczeniowego w 
 - **Express Elixir** – system płatności natychmiastowych
 - **SORBNET** – system RTGS przeznaczony do rozrachunku wysokokwotowego oraz final settlement
 
-Projekt został zrealizowany w architekturze **niemonomolitycznej** (*microservices / distributed services*), w której poszczególne moduły działają jako niezależne usługi. [file:507][file:525]
+Projekt został zrealizowany w architekturze **niemonomolitycznej** (*microservices / distributed services*), w której poszczególne moduły działają jako niezależne usługi. 
 
 ## Architektura projektu
 
@@ -17,7 +17,7 @@ System składa się z trzech głównych modułów:
 - `express-elixir`
 - `sorbnet`
 
-Komunikacja pomiędzy wybranymi modułami została oparta na **Apache Kafka** uruchamianej w środowisku **Docker**. [file:507][file:525] W aktualnej wersji projektu potwierdzono poprawne działanie komunikacji pomiędzy modułami **Elixir** i **SORBNET**, gdzie Elixir wysyła wiadomości do topicu `payments`, a SORBNET je odbiera. [file:507]
+Komunikacja pomiędzy wybranymi modułami została oparta na **Apache Kafka** uruchamianej w środowisku **Docker**.  W aktualnej wersji projektu potwierdzono poprawne działanie komunikacji pomiędzy modułami **Elixir** i **SORBNET**, gdzie Elixir wysyła wiadomości do topicu `payments`, a SORBNET je odbiera. [file:507]
 
 ## Uruchomienie projektu
 
@@ -57,4 +57,4 @@ W projekcie wykorzystano:
 
 ## Cel projektu
 
-Celem projektu jest odwzorowanie sposobu komunikacji i rozliczeń pomiędzy systemami płatniczymi, z uwzględnieniem podziału na niezależne moduły oraz komunikacji asynchronicznej pomiędzy usługami. [file:507][file:525]
+Celem projektu jest odwzorowanie sposobu komunikacji i rozliczeń pomiędzy systemami płatniczymi, z uwzględnieniem podziału na niezależne moduły oraz komunikacji asynchronicznej pomiędzy usługami. 
