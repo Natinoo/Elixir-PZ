@@ -9,8 +9,24 @@ import org.springframework.kafka.config.TopicBuilder;
 public class KafkaConfig {
 
     @Bean
-    public NewTopic paymentsTopic() {
-        return TopicBuilder.name("payments")
+    public NewTopic elixirTopic() {
+        return TopicBuilder.name("payments.elixir")
+                .partitions(1)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic elixirExpressTopic() {
+        return TopicBuilder.name("payments.elixir-express")
+                .partitions(1)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic sorbnetTopic() {
+        return TopicBuilder.name("payments.sorbnet")
                 .partitions(1)
                 .replicas(1)
                 .build();

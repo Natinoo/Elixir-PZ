@@ -1,11 +1,9 @@
 package pl.pz.elixir;
 
-import org.apache.kafka.clients.producer.RecordMetadata;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 
 @RestController
 @RequestMapping("/api/messages")
@@ -18,19 +16,11 @@ public class MessageController {
     }
 
     @PostMapping
-    public Map<String, String> send(@RequestParam String value) throws ExecutionException, InterruptedException {
-        RecordMetadata metadata = kafkaTemplate
-                .send("payments", value)
-                .get()
-                .getRecordMetadata();
-
-        System.out.println("ELIXIR sent to Kafka: topic=" + metadata.topic()
-                + ", partition=" + metadata.partition()
-                + ", offset=" + metadata.offset()
-                + ", value=" + value);
+    public Map<String, String> send(@RequestParam String topic, @RequestParam String value) {
+        kafkaTemplate.send(topic, value);
 
         return Map.of(
-                "topic", metadata.topic(),
+                "topic", topic,
                 "sent", value
         );
     }
