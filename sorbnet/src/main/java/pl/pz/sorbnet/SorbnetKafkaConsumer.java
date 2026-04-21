@@ -6,8 +6,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class SorbnetKafkaConsumer {
 
-    @KafkaListener(topics = "payments", groupId = "sorbnet-group")
+    @KafkaListener(topics = "payments.sorbnet", groupId = "sorbnet-group")
     public void consume(String message) {
-        System.out.println(">>> SORBNET listener invoked, raw message: '" + message + "'");
+        System.out.println(">>> SORBNET received payment: " + message);
     }
 }
