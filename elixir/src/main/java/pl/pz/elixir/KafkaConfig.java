@@ -16,6 +16,7 @@ public class KafkaConfig {
                 .build();
     }
 
+    // do przeniesienia do elixiru-express
     @Bean
     public NewTopic elixirExpressTopic() {
         return TopicBuilder.name("payments.elixir-express")
@@ -24,6 +25,7 @@ public class KafkaConfig {
                 .build();
     }
 
+    // do przeniesienia do sorbnetu
     @Bean
     public NewTopic sorbnetTopic() {
         return TopicBuilder.name("payments.sorbnet")

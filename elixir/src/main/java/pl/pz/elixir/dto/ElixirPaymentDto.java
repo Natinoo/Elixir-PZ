@@ -1,6 +1,6 @@
 package pl.pz.elixir.dto;
 
-public class PaymentDto {
+public class ElixirPaymentDto {
     private String paymentId;
     private Double amount;
     private String currency;
@@ -9,10 +9,10 @@ public class PaymentDto {
     private String title;
     private Boolean urgent;
 
-    public PaymentDto() {
+    public ElixirPaymentDto() {
     }
 
-    public PaymentDto(String paymentId, Double amount, String currency, String senderAccount,
+    public ElixirPaymentDto(String paymentId, Double amount, String currency, String senderAccount,
                       String receiverAccount, String title, Boolean urgent) {
         this.paymentId = paymentId;
         this.amount = amount;
