@@ -1,4 +1,5 @@
-package pl.pz.elixir.dto;
+package pl.pz.elixirexpress.dto;
+
 import jakarta.xml.bind.annotation.*;
 
 @XmlRootElement(name = "Payment")
@@ -11,8 +12,8 @@ import jakarta.xml.bind.annotation.*;
         "receiverAccount",
         "title"
 })
+public class ExpressPaymentDto {
 
-public class ElixirPaymentDto {
     private String paymentId;
     private Double amount;
     private String currency;
@@ -20,18 +21,7 @@ public class ElixirPaymentDto {
     private String receiverAccount;
     private String title;
 
-    public ElixirPaymentDto() {
-    }
-
-    public ElixirPaymentDto(String paymentId, Double amount, String currency, String senderAccount,
-                      String receiverAccount, String title) {
-        this.paymentId = paymentId;
-        this.amount = amount;
-        this.currency = currency;
-        this.senderAccount = senderAccount;
-        this.receiverAccount = receiverAccount;
-        this.title = title;
-    }
+    public ExpressPaymentDto() {}
 
     public String getPaymentId() {
         return paymentId;
