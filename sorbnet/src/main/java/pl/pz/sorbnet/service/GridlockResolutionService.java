@@ -2,6 +2,7 @@ package pl.pz.sorbnet.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,13 +20,16 @@ public class GridlockResolutionService {
     private final PaymentRepository paymentRepo;
     private final BankAccountRepository accountRepo;
 
+    @Value("${sorbnet.overlimit.block-after-hours:2}")
+    private int blockAfterHours;
+
     public GridlockResolutionService(PaymentRepository paymentRepo,
                                       BankAccountRepository accountRepo) {
         this.paymentRepo = paymentRepo;
         this.accountRepo = accountRepo;
     }
 
-    @Scheduled(fixedDelay = 30_000)
+    @Scheduled(fixedDelayString = "${sorbnet.gridlock.interval-ms:30000}")  // ← zmiana
     @Transactional
     public void resolve() {
         List<Payment> held = paymentRepo.findByStatus(PaymentStatus.GRIDLOCK_HELD);
@@ -66,14 +70,15 @@ public class GridlockResolutionService {
     @Scheduled(fixedDelay = 60_000)
     @Transactional
     public void autoBlock() {
-        LocalDateTime cutoff = LocalDateTime.now().minusHours(2);
+        LocalDateTime cutoff = LocalDateTime.now().minusHours(blockAfterHours);  // ← zmiana
         accountRepo.findOverLimit().stream()
             .filter(b -> b.getOverlimitSince() != null && b.getOverlimitSince().isBefore(cutoff))
             .forEach(b -> {
                 b.setBlocked(true);
                 b.setBlockedAt(LocalDateTime.now());
                 accountRepo.save(b);
-                log.warn("Bank {} automatycznie ZABLOKOWANY po 2h przekroczenia limitu", b.getBankId());
+                log.warn("Bank {} automatycznie ZABLOKOWANY po {}h przekroczenia limitu",
+                        b.getBankId(), blockAfterHours);
             });
     }
 }

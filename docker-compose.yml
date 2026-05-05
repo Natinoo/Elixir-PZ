@@ -49,27 +49,31 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
 
   sorbnet_system:
-  depends_on:
-    kafka:
-      condition: service_healthy
-    yugabyte:
-      condition: service_healthy
-  environment:
-    SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-    SPRING_DATASOURCE_URL: jdbc:yugabytedb://yugabyte:5433/sorbnet
-    SPRING_DATASOURCE_USERNAME: yugabyte
-    SPRING_DATASOURCE_PASSWORD: yugabyte
+    build: ./sorbnet       
+    container_name: sorbnet_system
+    ports:
+      - "8083:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      yugabyte:
+        condition: service_healthy
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_DATASOURCE_URL: jdbc:yugabytedb://yugabyte:5433/sorbnet
+      SPRING_DATASOURCE_USERNAME: yugabyte
+      SPRING_DATASOURCE_PASSWORD: yugabyte
 
-yugabyte:
-  image: yugabytedb/yugabyte:2.20.0.0-b76
-  container_name: yugabyte
-  ports:
-    - "5433:5433"   # YSQL (PostgreSQL-compatible)
-    - "7000:7000"   # Master UI
-    - "9000:9000"   # TServer UI
-  command: bin/yugabyted start --daemon=false
-  healthcheck:
-    test: ["CMD", "bin/yugabyted", "status"]
-    interval: 15s
-    timeout: 10s
-    retries: 10      
+  yugabyte:              
+    image: yugabytedb/yugabyte:2024.2.9.0-b55
+    container_name: yugabyte
+    ports:
+      - "5460:5433"
+      - "7000:7000"
+      - "9000:9000"
+    command: bin/yugabyted start --daemon=false
+    healthcheck:
+      test: ["CMD", "bin/yugabyted", "status"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
