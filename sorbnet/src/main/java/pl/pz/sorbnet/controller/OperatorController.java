@@ -60,7 +60,29 @@ public class OperatorController {
     }
 
     @GetMapping("/payments")
-    public List<Payment> allPayments() {
+    public List<Payment> allPayments(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String bankId) {
+
+        if (status != null && bankId != null) {
+            PaymentStatus ps = PaymentStatus.valueOf(status);
+            return paymentRepo.findBySenderBankIdOrReceiverBankId(bankId, bankId)
+                    .stream()
+                    .filter(p -> p.getStatus() == ps)
+                    .toList();
+        }
+        if (status != null) {
+            return paymentRepo.findByStatus(PaymentStatus.valueOf(status));
+        }
+        if (bankId != null) {
+            return paymentRepo.findBySenderBankIdOrReceiverBankId(bankId, bankId);
+        }
         return paymentRepo.findAll();
+    }
+
+    @GetMapping("/payments/settled-today")
+    public List<Payment> settledToday() {
+        LocalDateTime startOfDay = LocalDateTime.now().toLocalDate().atStartOfDay();
+        return paymentRepo.findByStatusAndSettledAtAfter(PaymentStatus.SETTLED, startOfDay);
     }
 }

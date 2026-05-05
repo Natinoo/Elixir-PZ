@@ -1,4 +1,3 @@
-// controller/AccountController.java
 package pl.pz.sorbnet.controller;
 
 import org.springframework.http.ResponseEntity;
@@ -16,18 +15,17 @@ import java.util.Map;
 @RequestMapping("/api/sorbnet/accounts")
 public class AccountController {
 
-     private final BankAccountRepository accountRepo;
+    private final BankAccountRepository accountRepo;
     private final GridlockResolutionService gridlockService;
-    private final SorbnetPaymentService paymentService; 
+    private final SorbnetPaymentService paymentService;
 
     public AccountController(BankAccountRepository accountRepo,
                               GridlockResolutionService gridlockService,
-                              SorbnetPaymentService paymentService) { 
+                              SorbnetPaymentService paymentService) {
         this.accountRepo = accountRepo;
         this.gridlockService = gridlockService;
-        this.paymentService = paymentService; 
+        this.paymentService = paymentService;
     }
-
 
     @GetMapping
     public List<BankAccount> listAll() {
@@ -44,24 +42,12 @@ public class AccountController {
     public ResponseEntity<Map<String, Object>> status(@PathVariable String bankId) {
         return ResponseEntity.ok(paymentService.getAccountStatus(bankId));
     }
+
     @PostMapping("/{bankId}/deposit")
-    public ResponseEntity<Map<String, Object>> deposit(@PathVariable String bankId,
-                                                        @RequestBody Map<String, BigDecimal> body) {
-        BankAccount bank = accountRepo.findById(bankId)
-                .orElseThrow(() -> new RuntimeException("Nie znaleziono banku: " + bankId));
-
-        bank.setBalance(bank.getBalance().add(body.get("amount")));
-
-        if (bank.getBalance().compareTo(bank.getDebtLimit().negate()) >= 0) {
-            bank.setOverlimitSince(null);
-        }
-        accountRepo.save(bank);
-        gridlockService.resolve(); // po zasileniu spróbuj odblokować kolejkę
-
-        return ResponseEntity.ok(Map.of(
-            "bankId", bankId,
-            "newBalance", bank.getBalance(),
-            "status", "DEPOSITED"
-        ));
+    public ResponseEntity<Map<String, Object>> deposit(
+            @PathVariable String bankId,
+            @RequestParam BigDecimal amount,
+            @RequestParam(required = false, defaultValue = "NBP") String sourceBankId) {
+        return ResponseEntity.ok(paymentService.simulateDeposit(bankId, amount, sourceBankId));
     }
 }

@@ -55,7 +55,6 @@ public class SorbnetPaymentService {
             return holdGridlock(dto, sender);
         }
 
-        // Rozliczenie RTGS
         sender.setBalance(newBalance);
         receiver.setBalance(receiver.getBalance().add(dto.getAmount()));
 
@@ -70,7 +69,6 @@ public class SorbnetPaymentService {
         payment.setSettledAt(LocalDateTime.now());
         paymentRepo.save(payment);
 
-        // Notyfikacja XML przez Kafkę
         String xml = toXml(dto);
         kafka.send("notifications.banks", payment.getReceiverBankId(), xml);
         kafka.send("notifications.banks", payment.getSenderBankId(), xml);
@@ -82,6 +80,73 @@ public class SorbnetPaymentService {
             "status", "SETTLED",
             "settledAt", payment.getSettledAt().toString()
         );
+    }
+
+    public Map<String, Object> simulateDeposit(String targetBankId, BigDecimal amount, String sourceBankId) {
+        BankAccount target = accountRepo.findById(targetBankId)
+            .orElseThrow(() -> new RuntimeException("Nieznany bank: " + targetBankId));
+
+        BigDecimal before = target.getBalance();
+        target.setBalance(before.add(amount));
+
+        if (target.getOverlimitSince() != null &&
+            target.getBalance().compareTo(target.getDebtLimit().negate()) >= 0) {
+            target.setOverlimitSince(null);
+        }
+
+        accountRepo.save(target);
+
+        Payment p = new Payment();
+        p.setPaymentId(UUID.randomUUID().toString());
+        p.setSenderBankId(sourceBankId != null ? sourceBankId : "NBP");
+        p.setReceiverBankId(targetBankId);
+        p.setAmount(amount);
+        p.setCurrency("PLN");
+        p.setTitle("Symulacja wpłaty kapitału");
+        p.setStatus(PaymentStatus.SETTLED);
+        p.setCreatedAt(LocalDateTime.now());
+        p.setSettledAt(LocalDateTime.now());
+        paymentRepo.save(p);
+
+        notify("notifications.banks", targetBankId, Map.of(
+            "type", "DEPOSIT_RECEIVED",
+            "bankId", targetBankId,
+            "amount", amount,
+            "newBalance", target.getBalance(),
+            "sourceBankId", sourceBankId != null ? sourceBankId : "NBP"
+        ));
+
+        return Map.of(
+            "bankId", targetBankId,
+            "depositedAmount", amount,
+            "balanceBefore", before,
+            "balanceAfter", target.getBalance(),
+            "overlimitCleared", target.getOverlimitSince() == null
+        );
+    }
+
+    public Map<String, Object> getAccountStatus(String bankId) {
+        BankAccount bank = accountRepo.findById(bankId)
+            .orElseThrow(() -> new RuntimeException("Nieznany bank: " + bankId));
+    
+        BigDecimal available = bank.getBalance().add(bank.getDebtLimit());
+        BigDecimal minDeposit = BigDecimal.ZERO;
+    
+        if (bank.getBalance().compareTo(bank.getDebtLimit().negate()) < 0) {
+            minDeposit = bank.getBalance().negate().subtract(bank.getDebtLimit());
+        }
+    
+        Map<String, Object> result = new HashMap<>();
+        result.put("bankId", bank.getBankId());
+        result.put("bankName", bank.getBankName());
+        result.put("balance", bank.getBalance());
+        result.put("debtLimit", bank.getDebtLimit());
+        result.put("availableCredit", available);
+        result.put("minDepositToRestore", minDeposit);
+        result.put("blocked", bank.isBlocked());
+        result.put("overlimitSince", bank.getOverlimitSince() != null
+                ? bank.getOverlimitSince().toString() : null);
+        return result;
     }
 
     private Map<String, Object> holdGridlock(SorbnetPaymentDto dto, BankAccount sender) {
@@ -160,31 +225,4 @@ public class SorbnetPaymentService {
         try { kafka.send(topic, key, mapper.writeValueAsString(payload)); }
         catch (Exception e) { log.error("Kafka error: {}", e.getMessage()); }
     }
-
-    
-    public Map<String, Object> getAccountStatus(String bankId) {
-        BankAccount bank = accountRepo.findById(bankId)
-            .orElseThrow(() -> new RuntimeException("Nieznany bank: " + bankId));
-
-        BigDecimal available = bank.getBalance().add(bank.getDebtLimit()); // ile jeszcze może wydać
-        BigDecimal minDeposit = BigDecimal.ZERO;
-
-    // Jeśli przekroczony limit – wylicz minimalną kwotę do wplaty
-    if (bank.getBalance().compareTo(bank.getDebtLimit().negate()) < 0) {
-        // minDeposit = |balance| - debtLimit
-        minDeposit = bank.getBalance().negate().subtract(bank.getDebtLimit());
-    }
-
-    return Map.of(
-        "bankId", bank.getBankId(),
-        "bankName", bank.getBankName(),
-        "balance", bank.getBalance(),
-        "debtLimit", bank.getDebtLimit(),
-        "availableCredit", available,
-        "minDepositToRestore", minDeposit,   // minimalna kwota żeby wyjść z overlimit
-        "blocked", bank.isBlocked(),
-        "overlimitSince", bank.getOverlimitSince() != null
-                ? bank.getOverlimitSince().toString() : null
-    );
-}
 }
