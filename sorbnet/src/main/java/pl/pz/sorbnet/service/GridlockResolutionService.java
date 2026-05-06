@@ -3,12 +3,13 @@ package pl.pz.sorbnet.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.pz.sorbnet.model.*;
 import pl.pz.sorbnet.repository.*;
-
+import java.util.Map;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -23,10 +24,14 @@ public class GridlockResolutionService {
     @Value("${sorbnet.overlimit.block-after-hours:2}")
     private int blockAfterHours;
 
+    private final SimpMessagingTemplate ws;
+
     public GridlockResolutionService(PaymentRepository paymentRepo,
-                                      BankAccountRepository accountRepo) {
-        this.paymentRepo = paymentRepo;
-        this.accountRepo = accountRepo;
+                                  BankAccountRepository accountRepo,
+                                  SimpMessagingTemplate ws) {
+    this.paymentRepo = paymentRepo;
+    this.accountRepo = accountRepo;
+    this.ws = ws;
     }
 
     @Scheduled(fixedDelayString = "${sorbnet.gridlock.interval-ms:30000}")  // ← zmiana
@@ -77,8 +82,22 @@ public class GridlockResolutionService {
                 b.setBlocked(true);
                 b.setBlockedAt(LocalDateTime.now());
                 accountRepo.save(b);
-                log.warn("Bank {} automatycznie ZABLOKOWANY po {}h przekroczenia limitu",
-                        b.getBankId(), blockAfterHours);
+                log.warn("Bank {} automatycznie ZABLOKOWANY", b.getBankId());
+
+                ws.convertAndSend("/topic/alerts/" + b.getBankId(), Map.of(
+                    "alert", true,
+                    "type", "BANK_BLOCKED",
+                    "message", "Bank został automatycznie zablokowany z powodu utraty płynności.",
+                    "balance", b.getBalance(),
+                    "debtLimit", b.getDebtLimit()
+                 ));
+                // WebSocket push do GUI operatora ← NOWE
+                    ws.convertAndSend("/topic/operator/emergencies", Map.of(
+                        "type", "BANK_BLOCKED",
+                        "bankId", b.getBankId(),
+                        "bankName", b.getBankName(),
+                        "blockedAt", b.getBlockedAt().toString()
+                    ));
             });
     }
 }
