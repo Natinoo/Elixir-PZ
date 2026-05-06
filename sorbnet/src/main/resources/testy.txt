@@ -1,0 +1,66 @@
+# Przelew PKO → PEKAO
+Invoke-RestMethod -Method POST -Uri "http://localhost:8080/api/sorbnet/payments" `
+  -ContentType "application/json" `
+  -Body '{"senderBankId":"PKO","receiverBankId":"PEKAO","amount":100000,"title":"Test RTGS"}'
+  # Depozyt z NBP na PKO
+Invoke-RestMethod -Method POST `
+  -Uri "http://localhost:8080/api/sorbnet/accounts/PKO/deposit?amount=500000&sourceBankId=NBP"
+
+  # Przelew który przekroczy limit (gridlock) - PKO ma debtLimit 2mln, balance 5mln
+# Wysyłamy 7.5mln żeby zejść poniżej -2mln
+Invoke-RestMethod -Method POST -Uri "http://localhost:8080/api/sorbnet/payments" `
+  -ContentType "application/json" `
+  -Body '{"senderBankId":"PKO","receiverBankId":"PEKAO","amount":7500000,"title":"Test Gridlock"}'
+
+  # Doładuj PKO żeby wyszedł z gridlocka (potrzebuje min ~9.6M żeby pokryć 7.5M przy balance ~5.4M)
+Invoke-RestMethod -Method POST `
+  -Uri "http://localhost:8080/api/sorbnet/accounts/PKO/deposit?amount=5000000&sourceBankId=NBP"
+
+# Poczekaj max 30 sekund (tyle wynosi gridlock.interval-ms) i sprawdź status płatności
+Start-Sleep -Seconds 35
+
+# Sprawdź czy przelew zmienił status na SETTLED
+Invoke-RestMethod -Uri "http://localhost:8080/api/sorbnet/accounts/PKO/status"
+
+# Wszystkie płatności
+Invoke-RestMethod -Uri "http://localhost:8080/api/sorbnet/operator/payments"
+
+# Tylko SETTLED
+Invoke-RestMethod -Uri "http://localhost:8080/api/sorbnet/operator/payments?status=SETTLED"
+
+# Płatności banku PKO
+Invoke-RestMethod -Uri "http://localhost:8080/api/sorbnet/operator/payments?bankId=PKO"
+
+# Gridlock queue
+Invoke-RestMethod -Uri "http://localhost:8080/api/sorbnet/operator/gridlock"
+
+# Sytuacje awaryjne (banki w overlimit)
+Invoke-RestMethod -Uri "http://localhost:8080/api/sorbnet/operator/emergencies"
+
+# Blokada banku
+Invoke-RestMethod -Method POST -Uri "http://localhost:8080/api/sorbnet/operator/banks/MBANK/block"
+
+# Odblokowanie
+Invoke-RestMethod -Method POST -Uri "http://localhost:8080/api/sorbnet/operator/banks/MBANK/unblock"
+
+# Historia płatności PKO z dzisiaj (domyślnie)
+Invoke-RestMethod -Uri "http://localhost:8080/api/sorbnet/payments?bankId=PKO"
+
+# Historia od konkretnej daty
+Invoke-RestMethod -Uri "http://localhost:8080/api/sorbnet/payments?bankId=PKO&from=2026-05-01"
+
+# Konkretna płatność po ID (wklej ID z wcześniejszego testu)
+Invoke-RestMethod -Uri "http://localhost:8080/api/sorbnet/payments/61d1f253-7a78-46ec-957a-ee4fc9acce5e"
+
+
+# Historia PKO z dzisiaj
+Invoke-RestMethod -Uri "http://localhost:8080/api/sorbnet/payments?bankId=PKO"
+
+# Historia od daty
+Invoke-RestMethod -Uri "http://localhost:8080/api/sorbnet/payments?bankId=PKO&from=2026-05-01"
+
+# Operator - wszystkie płatności
+Invoke-RestMethod -Uri "http://localhost:8080/api/sorbnet/operator/payments"
+
+# Operator - tylko GRIDLOCK_HELD
+Invoke-RestMethod -Uri "http://localhost:8080/api/sorbnet/operator/payments?status=GRIDLOCK_HELD"

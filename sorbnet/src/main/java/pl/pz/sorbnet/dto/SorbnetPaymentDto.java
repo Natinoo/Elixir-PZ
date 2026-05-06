@@ -1,5 +1,6 @@
 package pl.pz.sorbnet.dto;
 
+import java.math.BigDecimal;
 import jakarta.xml.bind.annotation.*;
 
 @XmlRootElement(name = "Payment")
@@ -8,6 +9,8 @@ import jakarta.xml.bind.annotation.*;
         "paymentId",
         "amount",
         "currency",
+        "senderBankId",
+        "receiverBankId",
         "senderAccount",
         "receiverAccount",
         "title"
@@ -15,8 +18,10 @@ import jakarta.xml.bind.annotation.*;
 public class SorbnetPaymentDto {
 
     private String paymentId;
-    private Double amount;
+    private BigDecimal amount;
     private String currency;
+    private String senderBankId;
+    private String receiverBankId;
     private String senderAccount;
     private String receiverAccount;
     private String title;
@@ -31,11 +36,11 @@ public class SorbnetPaymentDto {
         this.paymentId = paymentId;
     }
 
-    public Double getAmount() {
+    public BigDecimal getAmount() {
         return amount;
     }
 
-    public void setAmount(Double amount) {
+    public void setAmount(BigDecimal amount) {
         this.amount = amount;
     }
 
@@ -45,6 +50,22 @@ public class SorbnetPaymentDto {
 
     public void setCurrency(String currency) {
         this.currency = currency;
+    }
+
+    public String getSenderBankId() {
+        return senderBankId;
+    }
+
+    public void setSenderBankId(String senderBankId) {
+        this.senderBankId = senderBankId;
+    }
+
+    public String getReceiverBankId() {
+        return receiverBankId;
+    }
+
+    public void setReceiverBankId(String receiverBankId) {
+        this.receiverBankId = receiverBankId;
     }
 
     public String getSenderAccount() {
