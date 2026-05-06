@@ -15,22 +15,11 @@ public class KafkaConfig {
                 .replicas(1)
                 .build();
     }
-
-    // do przeniesienia do elixiru-express
     @Bean
-    public NewTopic elixirExpressTopic() {
-        return TopicBuilder.name("payments.elixir-express")
-                .partitions(1)
-                .replicas(1)
-                .build();
-    }
-
-    // do przeniesienia do sorbnetu
-    @Bean
-    public NewTopic sorbnetTopic() {
-        return TopicBuilder.name("payments.sorbnet")
-                .partitions(1)
-                .replicas(1)
-                .build();
-    }
+    public NewTopic settlementTopic() {
+    return TopicBuilder.name("payments.sorbnet.settlement")
+            .partitions(1)
+            .replicas(1)
+            .build();
+}
 }
