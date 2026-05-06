@@ -1,0 +1,26 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# Skompilowane pliki Java
+*.class
+*.jar
+*.war
+*.ear
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
+.springBeans
+.sts4-cache
+
+# Logi
+*.log
+
+# System
+.DS_Store
+Thumbs.db
