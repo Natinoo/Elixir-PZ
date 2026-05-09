@@ -31,6 +31,9 @@ public class SessionService {
         this.sessionReportService = sessionReportService;
         this.bankLiquidityService = bankLiquidityService;
     }
+    public List<ElixirPaymentDto> getCurrentSession() {
+        return currentSession;
+    }
 
     // dodawanie przelewów do sesji
     public void addToSession(String xml) {
@@ -89,7 +92,7 @@ public class SessionService {
     }
 
     // TRYB TESTOWY
-    @Scheduled(fixedRateString = "${elixir.session.interval}")
+    @Scheduled(fixedRateString = "${elixir.session.interval:600000}")
     public void testSession() {
         closeSession("TEST");
     }

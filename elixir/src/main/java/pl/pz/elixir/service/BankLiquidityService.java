@@ -75,4 +75,11 @@ public class BankLiquidityService {
     public Map<String, Boolean> getBlockedBanks() {
         return blockedBanks;
     }
+    public void blockBank(String bank) {
+        blockedBanks.put(bank, true);
+    }
+
+    public void unblockBank(String bank) {
+        blockedBanks.put(bank, false);
+    }
 }
