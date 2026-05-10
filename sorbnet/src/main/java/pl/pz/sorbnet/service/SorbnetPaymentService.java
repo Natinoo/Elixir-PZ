@@ -6,6 +6,7 @@ import jakarta.xml.bind.Marshaller;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.pz.sorbnet.dto.SorbnetPaymentDto;
@@ -28,14 +29,18 @@ public class SorbnetPaymentService {
     private final KafkaTemplate<String, String> kafka;
     private final ObjectMapper mapper;
 
+    private final SimpMessagingTemplate ws;
+
     public SorbnetPaymentService(BankAccountRepository accountRepo,
-                                  PaymentRepository paymentRepo,
-                                  KafkaTemplate<String, String> kafka,
-                                  ObjectMapper mapper) {
-        this.accountRepo = accountRepo;
-        this.paymentRepo = paymentRepo;
-        this.kafka = kafka;
-        this.mapper = mapper;
+                              PaymentRepository paymentRepo,
+                              KafkaTemplate<String, String> kafka,
+                              ObjectMapper mapper,
+                              SimpMessagingTemplate ws) {
+    this.accountRepo = accountRepo;
+    this.paymentRepo = paymentRepo;
+    this.kafka = kafka;
+    this.mapper = mapper;
+    this.ws = ws;
     }
 
     public Map<String, Object> process(SorbnetPaymentDto dto) {
@@ -172,6 +177,18 @@ public class SorbnetPaymentService {
             "debtLimit", sender.getDebtLimit()
         ));
 
+        // WebSocket push do GUI banku 
+    ws.convertAndSend("/topic/alerts/" + sender.getBankId(), Map.of(
+        "alert", true,
+        "type", "DEBT_LIMIT_EXCEEDED",
+        "message", "Przekroczono limit zadłużenia. Należy niezwłocznie uzupełnić środki.",
+        "balance", sender.getBalance(),
+        "debtLimit", sender.getDebtLimit(),
+        "overlimitSince", sender.getOverlimitSince().toString(),
+        "blockedIfNotResolvedBy", sender.getOverlimitSince().plusHours(2).toString()
+    ));
+
+
         return Map.of("paymentId", payment.getPaymentId(), "status", "GRIDLOCK_HELD");
     }
 
@@ -191,6 +208,14 @@ public class SorbnetPaymentService {
                 "balance", bank.getBalance(),
                 "debtLimit", bank.getDebtLimit()
             ));
+        // WebSocket push
+        ws.convertAndSend("/topic/alerts/" + bank.getBankId(), Map.of(
+            "alert", true,
+            "type", "APPROACHING_DEBT_LIMIT",
+            "message", "Saldo zbliża się do limitu zadłużenia.",
+            "balance", bank.getBalance(),
+            "debtLimit", bank.getDebtLimit()
+        ));   
         }
     }
 

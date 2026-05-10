@@ -17,7 +17,7 @@ target/
 .settings/
 .springBeans
 .sts4-cache
-
+.vscode/settings.json
 # Logi
 *.log
 
