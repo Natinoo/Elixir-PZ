@@ -1,9 +1,8 @@
 package pl.pz.elixir.controller;
 
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
-import pl.pz.elixir.service.BankLiquidityService;
 import org.springframework.web.bind.annotation.*;
+import pl.pz.elixir.service.BankLiquidityService;
+
 import java.util.Map;
 
 @RestController
@@ -24,6 +23,7 @@ public class LiquidityController {
     public Map<String, Boolean> blocked() {
         return bankLiquidityService.getBlockedBanks();
     }
+
     @PostMapping("/api/elixir/block/{bank}")
     public String block(@PathVariable String bank) {
 
@@ -38,5 +38,13 @@ public class LiquidityController {
         bankLiquidityService.unblockBank(bank);
 
         return "BANK UNBLOCKED: " + bank;
+    }
+
+    @PostMapping("/api/elixir/topup/{bank}")
+    public String topup(@PathVariable String bank, @RequestParam Double amount) {
+
+        bankLiquidityService.topUp(bank, amount);
+
+        return "TOPUP SUCCESS: " + bank+ " +" + amount;
     }
 }

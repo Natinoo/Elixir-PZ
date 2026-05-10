@@ -2,6 +2,7 @@ package pl.pz.elixir.controller;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+import pl.pz.elixir.model.SessionReport;
 import pl.pz.elixir.service.SessionReportService;
 
 import java.util.List;
@@ -15,8 +16,13 @@ public class SessionReportController {
         this.sessionReportService = sessionReportService;
     }
 
-    @GetMapping("/api/elixir/session-report")
-    public List<String> getReport() {
-        return sessionReportService.getLastSessionReport();
+    @GetMapping("/api/elixir/session-report/latest")
+    public SessionReport latest() {
+        return sessionReportService.getLastReport();
+    }
+
+    @GetMapping("/api/elixir/session-report/history")
+    public List<SessionReport> history() {
+        return sessionReportService.getAllReports();
     }
 }

@@ -40,17 +40,14 @@ public class SessionService {
 
         try {
 
-            ElixirPaymentDto payment =
-                    xmlMapper.readValue(xml, ElixirPaymentDto.class);
+            ElixirPaymentDto payment = xmlMapper.readValue(xml, ElixirPaymentDto.class);
 
             String sender = payment.getSenderAccount();
 
             // blokada banku
             if (bankLiquidityService.isBlocked(sender)) {
 
-                System.out.println(
-                        "❌ BLOCKED BANK: " + sender
-                );
+                System.out.println("❌ BLOCKED BANK: " + sender);
 
                 return;
             }
@@ -102,24 +99,17 @@ public class SessionService {
 
         if (currentSession.isEmpty()) {
 
-            System.out.println(
-                    "=== " + sessionName + " SESSION EMPTY ==="
-            );
+            System.out.println("=== " + sessionName + " SESSION EMPTY ===");
 
             return;
         }
 
-        System.out.println(
-                "=== CLOSING ELIXIR SESSION: "
-                        + sessionName
-                        + " ==="
-        );
+        System.out.println("=== CLOSING ELIXIR SESSION: " + sessionName+ " ===");
 
-        var result =
-                nettingService.calculateNetting(currentSession);
+        var result = nettingService.calculateNetting(currentSession);
 
         // zapis raportu
-        sessionReportService.saveReport(result);
+        sessionReportService.saveReport(sessionName, result);
 
         System.out.println("=== NETTING RESULT ===");
 
@@ -127,13 +117,8 @@ public class SessionService {
 
             System.out.println(line);
 
-            // wysyłka do Sorbnet
-            kafkaTemplate.send(
-                    "payments.sorbnet.settlement",
-                    line
-            );
+            kafkaTemplate.send("payments.sorbnet.settlement", line );
         }
-
         currentSession.clear();
     }
 }

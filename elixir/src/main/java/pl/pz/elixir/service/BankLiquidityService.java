@@ -14,7 +14,7 @@ public class BankLiquidityService {
     // aktualne salda
     private final Map<String, Double> balances = new HashMap<>();
 
-    // blokady
+    // blokady banków
     private final Map<String, Boolean> blockedBanks = new HashMap<>();
 
     public BankLiquidityService() {
@@ -37,15 +37,11 @@ public class BankLiquidityService {
         return blockedBanks.getOrDefault(bank, false);
     }
 
-    public void applyTransaction(String sender,
-                                 String receiver,
-                                 Double amount) {
+    public void applyTransaction(String sender, String receiver, Double amount) {
 
-        balances.put(sender,
-                balances.getOrDefault(sender, 0.0) - amount);
+        balances.put(sender, balances.getOrDefault(sender, 0.0) - amount);
 
-        balances.put(receiver,
-                balances.getOrDefault(receiver, 0.0) + amount);
+        balances.put(receiver, balances.getOrDefault(receiver, 0.0) + amount);
 
         checkLimit(sender);
     }
@@ -59,12 +55,27 @@ public class BankLiquidityService {
 
             blockedBanks.put(bank, true);
 
-            System.out.println(
-                    "🚨 BANK BLOCKED: "
-                            + bank
-                            + " balance="
-                            + balance
-            );
+            System.out.println("🚨 BANK BLOCKED: " + bank+ " balance=" + balance);
+        }
+    }
+
+    public void blockBank(String bank) {
+        blockedBanks.put(bank, true);
+    }
+
+    public void unblockBank(String bank) {
+        blockedBanks.put(bank, false);
+    }
+
+    public void topUp(String bank, Double amount) {
+
+        balances.put(bank, balances.getOrDefault(bank, 0.0) + amount);
+
+        double balance = balances.get(bank);
+        double limit = debtLimits.getOrDefault(bank, -1000.0);
+
+        if (balance >= limit) {
+            blockedBanks.put(bank, false);
         }
     }
 
@@ -74,12 +85,5 @@ public class BankLiquidityService {
 
     public Map<String, Boolean> getBlockedBanks() {
         return blockedBanks;
-    }
-    public void blockBank(String bank) {
-        blockedBanks.put(bank, true);
-    }
-
-    public void unblockBank(String bank) {
-        blockedBanks.put(bank, false);
     }
 }
