@@ -46,6 +46,14 @@ public class SorbnetPaymentService {
     public Map<String, Object> process(SorbnetPaymentDto dto) {
         if (dto.getPaymentId() == null) dto.setPaymentId(UUID.randomUUID().toString());
 
+        if (paymentRepo.existsById(dto.getPaymentId())) {
+        Payment existing = paymentRepo.findById(dto.getPaymentId()).get();
+        return Map.of(
+            "paymentId", existing.getPaymentId(),
+            "status", existing.getStatus().toString(),
+            "info", "Przelew już przetworzony (idempotent)"
+        );
+        }
         BankAccount sender = accountRepo.findById(dto.getSenderBankId())
                 .orElseThrow(() -> new RuntimeException("Nieznany bank: " + dto.getSenderBankId()));
         BankAccount receiver = accountRepo.findById(dto.getReceiverBankId())

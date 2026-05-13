@@ -64,16 +64,26 @@ services:
       SPRING_DATASOURCE_USERNAME: yugabyte
       SPRING_DATASOURCE_PASSWORD: yugabyte
 
-  yugabyte:              
-    image: yugabytedb/yugabyte:2024.2.9.0-b55
-    container_name: yugabyte
-    ports:
-      - "5460:5433"
-      - "7000:7000"
-      - "9000:9000"
-    command: bin/yugabyted start --daemon=false
-    healthcheck:
-      test: ["CMD", "bin/yugabyted", "status"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
+  yugabyte:
+  image: yugabytedb/yugabyte:2024.2.9.0-b55
+  container_name: yugabyte
+  ports:
+    - "5460:5433"
+    - "7000:7000"
+    - "9000:9000"
+  command: |
+    bash -c '
+    mkdir -p /var/ybinit
+    echo "CREATE DATABASE sorbnet;" > /var/ybinit/01-db.sql
+    bin/yugabyted start --daemon=false --initial_scripts_dir=/var/ybinit
+    '
+  healthcheck:
+    test: ["CMD-SHELL", "bin/ysqlsh -c 'SELECT 1'"]
+    interval: 15s
+    timeout: 10s
+    retries: 10
+  volumes:
+    - yugabyte_data:/home/yugabyte/var
+
+volumes:
+  yugabyte_data:
