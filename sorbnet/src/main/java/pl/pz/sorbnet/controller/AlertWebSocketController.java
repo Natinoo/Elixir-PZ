@@ -22,6 +22,16 @@ public class AlertWebSocketController {
     }
 
     // GUI wysyła /app/alerts/{bankId} → dostaje aktualny stan
+    /**
+     * GUI banku wysyła zapytanie przy załadowaniu strony:
+     *   stompClient.send("/app/alerts/PKO", {}, "")
+     *
+     * Serwer odpowiada aktualnym stanem konta na topiku:
+     *   /topic/alerts/{bankId}
+     *
+     * Dzięki temu GUI nie potrzebuje osobnego REST endpoint —
+     * wszystko idzie przez jedno połączenie WebSocket.
+     */
     @MessageMapping("/alerts/{bankId}")
     public void getAlert(@DestinationVariable String bankId) {
         BankAccount bank = accountRepo.findById(bankId).orElseThrow();

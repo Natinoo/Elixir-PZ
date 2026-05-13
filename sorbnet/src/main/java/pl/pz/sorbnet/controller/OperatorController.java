@@ -7,6 +7,7 @@ import pl.pz.sorbnet.model.Payment;
 import pl.pz.sorbnet.model.PaymentStatus;
 import pl.pz.sorbnet.repository.BankAccountRepository;
 import pl.pz.sorbnet.repository.PaymentRepository;
+import pl.pz.sorbnet.service.GridlockResolutionService;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -18,11 +19,15 @@ public class OperatorController {
 
     private final BankAccountRepository accountRepo;
     private final PaymentRepository paymentRepo;
+    private final GridlockResolutionService gridlockService;
+      
 
     public OperatorController(BankAccountRepository accountRepo,
-                               PaymentRepository paymentRepo) {
+                               PaymentRepository paymentRepo, GridlockResolutionService gridlockService) {
         this.accountRepo = accountRepo;
         this.paymentRepo = paymentRepo;
+        this.gridlockService = gridlockService;
+        
     }
 
     @GetMapping("/banks")
@@ -32,21 +37,14 @@ public class OperatorController {
 
     @PostMapping("/banks/{bankId}/block")
     public ResponseEntity<Map<String, Object>> block(@PathVariable String bankId) {
-        BankAccount bank = accountRepo.findById(bankId).orElseThrow();
-        bank.setBlocked(true);
-        bank.setBlockedAt(LocalDateTime.now());
-        accountRepo.save(bank);
-        return ResponseEntity.ok(Map.of("bankId", bankId, "status", "BLOCKED"));
-    }
-
+    gridlockService.blockBank(bankId);  
+    return ResponseEntity.ok(Map.of("bankId", bankId, "status", "BLOCKED"));
+}
+     // endpoint — przycisk "Odblokuj" w GUI operatora wywołuje ten endpoint
     @PostMapping("/banks/{bankId}/unblock")
     public ResponseEntity<Map<String, Object>> unblock(@PathVariable String bankId) {
-        BankAccount bank = accountRepo.findById(bankId).orElseThrow();
-        bank.setBlocked(false);
-        bank.setBlockedAt(null);
-        bank.setOverlimitSince(null);
-        accountRepo.save(bank);
-        return ResponseEntity.ok(Map.of("bankId", bankId, "status", "UNBLOCKED"));
+    gridlockService.unblockBank(bankId); // ← zamień logikę na serwis
+    return ResponseEntity.ok(Map.of("bankId", bankId, "status", "UNBLOCKED"));
     }
 
     @GetMapping("/emergencies")
