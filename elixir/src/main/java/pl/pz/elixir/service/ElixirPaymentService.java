@@ -1,12 +1,17 @@
 package pl.pz.elixir.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import pl.pz.elixir.dto.ElixirPaymentDto;
+import pl.pz.elixir.model.Payment;
+import pl.pz.elixir.model.PaymentStatus;
+import pl.pz.elixir.repository.PaymentRepository;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -14,23 +19,47 @@ import java.util.UUID;
 public class ElixirPaymentService {
 
     private final KafkaTemplate<String, String> kafkaTemplate;
-    private final ObjectMapper objectMapper;
+    private final XmlMapper xmlMapper;
+    private final PaymentRepository paymentRepository;
 
-    public ElixirPaymentService(KafkaTemplate<String, String> kafkaTemplate, ObjectMapper objectMapper) {
+    public ElixirPaymentService(
+            KafkaTemplate<String, String> kafkaTemplate,
+            XmlMapper xmlMapper,
+            PaymentRepository paymentRepository
+    ) {
         this.kafkaTemplate = kafkaTemplate;
-        this.objectMapper = objectMapper;
+        this.xmlMapper = xmlMapper;
+        this.paymentRepository = paymentRepository;
     }
 
-    public Map<String, Object> processPayment(ElixirPaymentDto paymentDto) {
-
-        // generowanie ID
-        if (paymentDto.getPaymentId() == null || paymentDto.getPaymentId().isBlank()) {
+    public Map<String, Object> processPayment(
+            ElixirPaymentDto paymentDto
+    ) {
+        if (paymentDto.getPaymentId() == null
+                || paymentDto.getPaymentId().isBlank()) {
             paymentDto.setPaymentId(UUID.randomUUID().toString());
         }
 
-        String payload = toJson(paymentDto);
+        Payment payment = new Payment(
+                paymentDto.getPaymentId(),
+                paymentDto.getSenderAccount(),
+                paymentDto.getReceiverAccount(),
+                paymentDto.getAmount(),
+                paymentDto.getCurrency(),
+                paymentDto.getTitle(),
+                PaymentStatus.QUEUED,
+                LocalDateTime.now()
+        );
 
-        kafkaTemplate.send("payments.elixir", paymentDto.getPaymentId(), payload);
+        paymentRepository.save(payment);
+
+        String payload = toXml(paymentDto);
+
+        kafkaTemplate.send(
+                "payments.elixir",
+                paymentDto.getPaymentId(),
+                payload
+        );
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("paymentId", paymentDto.getPaymentId());
@@ -39,11 +68,37 @@ public class ElixirPaymentService {
         return response;
     }
 
-    private String toJson(ElixirPaymentDto paymentDto) {
+    public List<Payment> getAllPayments() {
+        return paymentRepository.findAll();
+    }
+
+    public List<Payment> getPaymentsByStatus(
+            PaymentStatus status
+    ) {
+        return paymentRepository.findByStatus(status);
+    }
+
+    public void updatePaymentStatus(
+            String paymentId,
+            PaymentStatus status
+    ) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new RuntimeException("Payment not found: " + paymentId));
+
+        payment.setStatus(status);
+        paymentRepository.save(payment);
+    }
+
+    private String toXml(
+            ElixirPaymentDto paymentDto
+    ) {
         try {
-            return objectMapper.writeValueAsString(paymentDto);
+            return xmlMapper.writeValueAsString(paymentDto);
         } catch (JsonProcessingException e) {
-            throw new RuntimeException("Cannot serialize payment", e);
+            throw new RuntimeException(
+                    "Cannot serialize payment to XML",
+                    e
+            );
         }
     }
 }

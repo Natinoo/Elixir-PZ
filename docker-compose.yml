@@ -1,4 +1,5 @@
 version: '3.9'
+
 services:
   kafka:
     image: apache/kafka:4.0.0
@@ -21,10 +22,50 @@ services:
       KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
       CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/9092'"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
       interval: 10s
-      timeout: 5s
-      retries: 10
+      timeout: 10s
+      retries: 12
+
+  kafka-init:
+    image: apache/kafka:4.0.0
+    container_name: kafka_init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      "
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic payments.elixir --partitions 1 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic payments.elixir-express --partitions 1 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic payments.sorbnet.settlement --partitions 1 --replication-factor 1
+      "
+    restart: "no"
+
+  yugabyte:
+    image: yugabytedb/yugabyte:2024.2.9.0-b55
+    container_name: yugabyte
+    ports:
+      - "5460:5433"
+      - "7000:7000"
+      - "9000:9000"
+    command: |
+      bash -c '
+      mkdir -p /var/ybinit
+      cat <<EOF > /var/ybinit/01-init.sql
+      CREATE DATABASE elixir;
+      CREATE DATABASE sorbnet;
+      EOF
+      bin/yugabyted start --daemon=false --initial_scripts_dir=/var/ybinit
+      '
+    healthcheck:
+      test: ["CMD-SHELL", "bin/ysqlsh -h $(hostname -i) -U yugabyte -d yugabyte -tAc 'SELECT 1' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+    volumes:
+      - yugabyte_data:/home/yugabyte/var
 
   elixir_system:
     build: ./elixir
@@ -32,10 +73,15 @@ services:
     ports:
       - "8081:8080"
     depends_on:
-      kafka:
+      kafka-init:
+        condition: service_completed_successfully
+      yugabyte:
         condition: service_healthy
     environment:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_DATASOURCE_URL: jdbc:postgresql://yugabyte:5433/elixir
+      SPRING_DATASOURCE_USERNAME: yugabyte
+      SPRING_DATASOURCE_PASSWORD: yugabyte
 
   elixir_express_system:
     build: ./elixir-express
@@ -43,47 +89,26 @@ services:
     ports:
       - "8082:8080"
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     environment:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
 
   sorbnet_system:
-    build: ./sorbnet       
+    build: ./sorbnet
     container_name: sorbnet_system
     ports:
       - "8083:8080"
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       yugabyte:
         condition: service_healthy
     environment:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      SPRING_DATASOURCE_URL: jdbc:yugabytedb://yugabyte:5433/sorbnet
+      SPRING_DATASOURCE_URL: jdbc:postgresql://yugabyte:5433/sorbnet
       SPRING_DATASOURCE_USERNAME: yugabyte
       SPRING_DATASOURCE_PASSWORD: yugabyte
-
-  yugabyte:
-  image: yugabytedb/yugabyte:2024.2.9.0-b55
-  container_name: yugabyte
-  ports:
-    - "5460:5433"
-    - "7000:7000"
-    - "9000:9000"
-  command: |
-    bash -c '
-    mkdir -p /var/ybinit
-    echo "CREATE DATABASE sorbnet;" > /var/ybinit/01-db.sql
-    bin/yugabyted start --daemon=false --initial_scripts_dir=/var/ybinit
-    '
-  healthcheck:
-    test: ["CMD-SHELL", "bin/ysqlsh -c 'SELECT 1'"]
-    interval: 15s
-    timeout: 10s
-    retries: 10
-  volumes:
-    - yugabyte_data:/home/yugabyte/var
 
 volumes:
   yugabyte_data:
