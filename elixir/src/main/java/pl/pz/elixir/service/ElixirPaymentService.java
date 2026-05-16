@@ -32,11 +32,8 @@ public class ElixirPaymentService {
         this.paymentRepository = paymentRepository;
     }
 
-    public Map<String, Object> processPayment(
-            ElixirPaymentDto paymentDto
-    ) {
-        if (paymentDto.getPaymentId() == null
-                || paymentDto.getPaymentId().isBlank()) {
+    public Map<String, Object> processPayment(ElixirPaymentDto paymentDto) {
+        if (paymentDto.getPaymentId() == null || paymentDto.getPaymentId().isBlank()) {
             paymentDto.setPaymentId(UUID.randomUUID().toString());
         }
 
@@ -72,16 +69,11 @@ public class ElixirPaymentService {
         return paymentRepository.findAll();
     }
 
-    public List<Payment> getPaymentsByStatus(
-            PaymentStatus status
-    ) {
+    public List<Payment> getPaymentsByStatus(PaymentStatus status) {
         return paymentRepository.findByStatus(status);
     }
 
-    public void updatePaymentStatus(
-            String paymentId,
-            PaymentStatus status
-    ) {
+    public void updatePaymentStatus(String paymentId, PaymentStatus status) {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new RuntimeException("Payment not found: " + paymentId));
 
@@ -89,16 +81,11 @@ public class ElixirPaymentService {
         paymentRepository.save(payment);
     }
 
-    private String toXml(
-            ElixirPaymentDto paymentDto
-    ) {
+    private String toXml(ElixirPaymentDto paymentDto) {
         try {
             return xmlMapper.writeValueAsString(paymentDto);
         } catch (JsonProcessingException e) {
-            throw new RuntimeException(
-                    "Cannot serialize payment to XML",
-                    e
-            );
+            throw new RuntimeException("Cannot serialize payment to XML", e);
         }
     }
 }

@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ELIXIR GUI</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div>
+        <h1>ELIXIR</h1>
+        <p class="subtitle">Panel operatora i pracownika banku</p>
+      </div>
+      <div class="tabs">
+        <button class="tab active" type="button" onclick="showTab('operator')">Operator przelewów</button>
+        <button class="tab" type="button" onclick="showTab('worker')">Pracownik banku</button>
+      </div>
+    </header>
+
+    <section id="operator-tab" class="tab-content active">
+      <div class="card">
+        <h2>Nowy przelew</h2>
+        <form id="payment-form">
+          <div class="grid">
+            <div>
+              <label for="senderAccount">Konto nadawcy</label>
+              <input type="text" id="senderAccount" placeholder="BANK_A" required />
+            </div>
+            <div>
+              <label for="receiverAccount">Konto odbiorcy</label>
+              <input type="text" id="receiverAccount" placeholder="BANK_B" required />
+            </div>
+            <div>
+              <label for="amount">Kwota</label>
+              <input type="number" id="amount" step="0.01" min="0.01" placeholder="1000.00" required />
+            </div>
+            <div>
+              <label for="currency">Waluta</label>
+              <input type="text" id="currency" placeholder="PLN" value="PLN" required />
+            </div>
+          </div>
+          <div>
+            <label for="title">Tytuł</label>
+            <input type="text" id="title" placeholder="Przelew testowy" required />
+          </div>
+          <button type="submit">Wyślij przelew</button>
+        </form>
+        <div id="payment-message" class="message"></div>
+      </div>
+
+      <div class="card">
+        <div class="row-between">
+          <h2>Historia przelewów</h2>
+          <div class="filters">
+            <button type="button" onclick="loadPayments()">Wszystkie</button>
+            <button type="button" onclick="loadPaymentsByStatus('QUEUED')">Queued</button>
+            <button type="button" onclick="loadPaymentsByStatus('PROCESSED')">Processed</button>
+            <button type="button" onclick="loadPaymentsByStatus('BLOCKED')">Blocked</button>
+            <button type="button" onclick="loadPaymentsByStatus('REJECTED')">Rejected</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nadawca</th>
+                <th>Odbiorca</th>
+                <th>Kwota</th>
+                <th>Waluta</th>
+                <th>Tytuł</th>
+                <th>Status</th>
+                <th>Data</th>
+              </tr>
+            </thead>
+            <tbody id="payments-body">
+              <tr><td colspan="8">Ładowanie...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="worker-tab" class="tab-content">
+      <div class="card">
+        <div class="row-between">
+          <h2>Panel pracownika banku</h2>
+          <div class="inline">
+            <label for="selectedBank">Bank:</label>
+            <select id="selectedBank" onchange="refreshWorkerView()">
+              <option value="BANK_A">BANK_A</option>
+              <option value="BANK_B">BANK_B</option>
+              <option value="BANK_C">BANK_C</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <span class="label">Stan konta rozrachunkowego</span>
+            <strong id="balance-value">-</strong>
+          </div>
+          <div class="stat">
+            <span class="label">Limit zadłużenia</span>
+            <strong id="limit-value">-1000.00 PLN</strong>
+          </div>
+          <div class="stat">
+            <span class="label">Aktualny status banku</span>
+            <strong id="blocked-value">-</strong>
+          </div>
+          <div class="stat">
+            <span class="label">Zobowiązania / wynik sesyjny</span>
+            <strong id="bank-report-count">-</strong>
+          </div>
+        </div>
+
+        <div id="bank-alert" class="alert hidden"></div>
+      </div>
+
+      <div class="card">
+        <h2>Akcje awaryjne</h2>
+        <div class="topup-box">
+          <input type="number" id="topupAmount" step="0.01" placeholder="Kwota top-up" />
+          <button type="button" onclick="topUpSelectedBank()">Uzupełnij środki</button>
+          <button type="button" class="secondary" onclick="unblockSelectedBank()">Odblokuj bank</button>
+        </div>
+        <div id="topup-message" class="message"></div>
+      </div>
+
+      <div class="card">
+        <h2>Raport końcowy banku z ostatniej sesji</h2>
+        <ul id="bank-report-list" class="report-list">
+          <li>Ładowanie...</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>Ostatni raport sesji ELIXIR</h2>
+        <pre id="session-report-box">Ładowanie...</pre>
+      </div>
+    </section>
+  </div>
+
+  <div id="popup-overlay" class="popup-overlay hidden">
+    <div class="popup">
+      <h3>Alert limitu zadłużenia</h3>
+      <p id="popup-text">Przekroczono limit zadłużenia banku.</p>
+      <button type="button" onclick="closePopup()">Rozumiem</button>
+    </div>
+  </div>
+
+  <script>
+    const API = "";
+
+    const BANK_LIMITS = {
+      BANK_A: -1000,
+      BANK_B: -1000,
+      BANK_C: -1000
+    };
+
+    function showTab(name) {
+      document.querySelectorAll(".tab").forEach(btn => btn.classList.remove("active"));
+      document.querySelectorAll(".tab-content").forEach(tab => tab.classList.remove("active"));
+
+      if (name === "operator") {
+        document.querySelectorAll(".tab")[0].classList.add("active");
+        document.getElementById("operator-tab").classList.add("active");
+      } else {
+        document.querySelectorAll(".tab")[1].classList.add("active");
+        document.getElementById("worker-tab").classList.add("active");
+        refreshWorkerView();
+      }
+    }
+
+    document.getElementById("payment-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const msg = document.getElementById("payment-message");
+      const senderAccount = document.getElementById("senderAccount").value.trim();
+      const receiverAccount = document.getElementById("receiverAccount").value.trim();
+      const amountRaw = document.getElementById("amount").value.trim();
+      const currency = document.getElementById("currency").value.trim();
+      const title = document.getElementById("title").value.trim();
+
+      if (!amountRaw || isNaN(Number(amountRaw)) || Number(amountRaw) <= 0) {
+        msg.textContent = "Podaj poprawną kwotę, np. 1000.00";
+        return;
+      }
+
+      const payloadXml = `
+<Payment>
+  <amount>${Number(amountRaw).toFixed(2)}</amount>
+  <currency>${escapeXml(currency)}</currency>
+  <senderAccount>${escapeXml(senderAccount)}</senderAccount>
+  <receiverAccount>${escapeXml(receiverAccount)}</receiverAccount>
+  <title>${escapeXml(title)}</title>
+</Payment>`.trim();
+
+      msg.textContent = "Wysyłanie...";
+
+      try {
+        const response = await fetch(`${API}/api/elixir/payments`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/xml",
+            "Accept": "application/xml, text/xml, */*"
+          },
+          body: payloadXml
+        });
+
+        const text = await response.text();
+
+        if (!response.ok) {
+          throw new Error(`Nie udało się zapisać przelewu (HTTP ${response.status})`);
+        }
+
+        const xml = parseXml(text);
+        const paymentId = getFirstTagText(xml, "paymentId") || "brak";
+        msg.textContent = `Przelew zapisany. ID: ${paymentId}`;
+
+        document.getElementById("payment-form").reset();
+        document.getElementById("currency").value = "PLN";
+
+        await loadPayments();
+        await refreshWorkerView();
+      } catch (err) {
+        msg.textContent = `Błąd: ${err.message}`;
+      }
+    });
+
+    async function fetchXml(url, options = {}) {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          "Accept": "application/xml, text/xml, */*",
+          ...(options.headers || {})
+        }
+      });
+
+      const text = await response.text();
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      return { text, xml: parseXml(text) };
+    }
+
+    function parseXml(text) {
+      return new DOMParser().parseFromString(text || "", "application/xml");
+    }
+
+    function escapeXml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+    }
+
+    function getFirstTagText(xml, tagName) {
+      const el = xml.getElementsByTagName(tagName)[0];
+      return el ? el.textContent : "";
+    }
+
+    function getNodeChildText(node, tagName) {
+      const el = Array.from(node.children).find(child => child.tagName === tagName);
+      return el ? el.textContent : "";
+    }
+
+    function parseMapXml(xml) {
+      const root = xml.documentElement;
+      const result = {};
+
+      if (!root || root.tagName === "parsererror") return result;
+
+      Array.from(root.children).forEach(node => {
+        const raw = node.textContent?.trim() ?? "";
+        if (raw === "true" || raw === "false") {
+          result[node.tagName] = raw === "true";
+        } else if (raw !== "" && !isNaN(Number(raw))) {
+          result[node.tagName] = Number(raw);
+        } else {
+          result[node.tagName] = raw;
+        }
+      });
+
+      return result;
+    }
+
+    function parsePaymentsXml(xml) {
+      const result = [];
+      const paymentNodes = xml.getElementsByTagName("item");
+
+      Array.from(paymentNodes).forEach(node => {
+        result.push({
+          paymentId: getNodeChildText(node, "paymentId"),
+          senderAccount: getNodeChildText(node, "senderAccount"),
+          receiverAccount: getNodeChildText(node, "receiverAccount"),
+          amount: getNodeChildText(node, "amount"),
+          currency: getNodeChildText(node, "currency"),
+          title: getNodeChildText(node, "title"),
+          status: getNodeChildText(node, "status"),
+          createdAt: getNodeChildText(node, "createdAt")
+        });
+      });
+
+      return result;
+    }
+
+    function parseStringListXml(xml) {
+      const items = xml.getElementsByTagName("item");
+      return Array.from(items).map(x => x.textContent?.trim() ?? "");
+    }
+
+    function parseSessionReportXml(xml) {
+      const root = xml.documentElement;
+      if (!root || root.tagName === "parsererror" || !root.tagName) return null;
+      if (root.textContent?.trim() === "null") return null;
+
+      const nettingResultNode = root.getElementsByTagName("nettingResult")[0];
+      const nettingItems = nettingResultNode
+        ? Array.from(nettingResultNode.getElementsByTagName("item")).map(x => x.textContent?.trim() ?? "")
+        : [];
+
+      return {
+        sessionName: getFirstTagText(xml, "sessionName"),
+        closedAt: getFirstTagText(xml, "closedAt"),
+        nettingResult: nettingItems
+      };
+    }
+
+    async function loadPayments() {
+      const tbody = document.getElementById("payments-body");
+      tbody.innerHTML = "<tr><td colspan='8'>Ładowanie...</td></tr>";
+
+      try {
+        const { xml } = await fetchXml(`${API}/api/elixir/history`);
+        const data = parsePaymentsXml(xml);
+        renderPayments(data);
+      } catch (err) {
+        tbody.innerHTML = "<tr><td colspan='8'>Błąd pobierania przelewów</td></tr>";
+      }
+    }
+
+    async function loadPaymentsByStatus(status) {
+      const tbody = document.getElementById("payments-body");
+      tbody.innerHTML = "<tr><td colspan='8'>Ładowanie...</td></tr>";
+
+      try {
+        const { xml } = await fetchXml(`${API}/api/elixir/history/status/${status}`);
+        const data = parsePaymentsXml(xml);
+        renderPayments(data);
+      } catch (err) {
+        tbody.innerHTML = "<tr><td colspan='8'>Błąd pobierania przelewów</td></tr>";
+      }
+    }
+
+    function renderPayments(data) {
+      const tbody = document.getElementById("payments-body");
+
+      if (!Array.isArray(data) || data.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='8'>Brak danych</td></tr>";
+        return;
+      }
+
+      tbody.innerHTML = data.map(payment => `
+        <tr>
+          <td>${payment.paymentId || "-"}</td>
+          <td>${payment.senderAccount || "-"}</td>
+          <td>${payment.receiverAccount || "-"}</td>
+          <td>${formatMoney(payment.amount, payment.currency)}</td>
+          <td>${payment.currency || "-"}</td>
+          <td>${payment.title || "-"}</td>
+          <td><span class="status ${String(payment.status || '').toLowerCase()}">${payment.status || "-"}</span></td>
+          <td>${formatDate(payment.createdAt)}</td>
+        </tr>
+      `).join("");
+    }
+
+    async function refreshWorkerView() {
+      const bank = document.getElementById("selectedBank").value;
+      const limit = BANK_LIMITS[bank] ?? -1000;
+      document.getElementById("limit-value").textContent = formatMoney(limit, "PLN");
+
+      await Promise.all([
+        loadLiquidity(bank, limit),
+        loadBankReport(bank),
+        loadLatestSessionReport()
+      ]);
+    }
+
+    async function loadLiquidity(bank, limit) {
+      try {
+        const [liquidityData, blockedData] = await Promise.all([
+          fetchXml(`${API}/api/elixir/liquidity`).then(r => parseMapXml(r.xml)),
+          fetchXml(`${API}/api/elixir/blocked`).then(r => parseMapXml(r.xml))
+        ]);
+
+        const balance = Number(liquidityData[bank] ?? 0);
+        const isBlocked = Boolean(blockedData[bank]);
+
+        document.getElementById("balance-value").textContent = formatMoney(balance, "PLN");
+        document.getElementById("blocked-value").textContent = isBlocked ? "ZABLOKOWANY" : "AKTYWNY";
+
+        const alertBox = document.getElementById("bank-alert");
+
+        if (balance < limit || isBlocked) {
+          alertBox.classList.remove("hidden");
+          alertBox.innerHTML = `
+            <strong>Uwaga:</strong> Bank ${bank} przekroczył limit zadłużenia lub został zablokowany.
+            Przed zamknięciem sesji należy uzupełnić środki.
+          `;
+          openPopup(bank, balance, limit, isBlocked);
+        } else {
+          alertBox.classList.add("hidden");
+          closePopup();
+        }
+      } catch (err) {
+        document.getElementById("balance-value").textContent = "Błąd";
+        document.getElementById("blocked-value").textContent = "Błąd";
+      }
+    }
+
+    async function loadBankReport(bank) {
+      const list = document.getElementById("bank-report-list");
+      const count = document.getElementById("bank-report-count");
+
+      try {
+        const { xml } = await fetchXml(`${API}/api/elixir/bank/${bank}/report`);
+        const data = parseStringListXml(xml);
+
+        if (!Array.isArray(data) || data.length === 0) {
+          list.innerHTML = "<li>Brak raportu dla banku z ostatniej sesji.</li>";
+          count.textContent = "0 pozycji";
+          return;
+        }
+
+        count.textContent = `${data.length} pozycji`;
+        list.innerHTML = data.map(line => `<li>${escapeHtml(line)}</li>`).join("");
+      } catch (err) {
+        list.innerHTML = "<li>Błąd pobierania raportu banku.</li>";
+        count.textContent = "Błąd";
+      }
+    }
+
+    async function loadLatestSessionReport() {
+      const box = document.getElementById("session-report-box");
+
+      try {
+        const { text, xml } = await fetchXml(`${API}/api/elixir/session-report/latest`);
+
+        if (!text || text.trim() === "" || text.trim() === "null") {
+          box.textContent = "Brak raportu z ostatniej sesji.";
+          return;
+        }
+
+        const data = parseSessionReportXml(xml);
+
+        if (!data) {
+          box.textContent = "Brak raportu z ostatniej sesji.";
+          return;
+        }
+
+        box.textContent =
+          `Sesja: ${data.sessionName || "-"}\n` +
+          `Zamknięta: ${formatDate(data.closedAt)}\n\n` +
+          (data.nettingResult?.length
+            ? data.nettingResult.join("\n")
+            : "Brak pozycji w raporcie.");
+      } catch (err) {
+        box.textContent = "Brak raportu z ostatniej sesji.";
+      }
+    }
+
+    async function topUpSelectedBank() {
+      const bank = document.getElementById("selectedBank").value;
+      const amount = document.getElementById("topupAmount").value;
+      const message = document.getElementById("topup-message");
+
+      if (!amount || Number(amount) <= 0) {
+        message.textContent = "Podaj poprawną kwotę top-up.";
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API}/api/elixir/topup/${bank}?amount=${amount}`, {
+          method: "POST",
+          headers: {
+            "Accept": "text/plain, application/xml, */*"
+          }
+        });
+
+        const text = await response.text();
+        message.textContent = text || "Top-up wykonany.";
+
+        await refreshWorkerView();
+      } catch (err) {
+        message.textContent = "Błąd podczas top-up.";
+      }
+    }
+
+    async function unblockSelectedBank() {
+      const bank = document.getElementById("selectedBank").value;
+      const message = document.getElementById("topup-message");
+
+      try {
+        const response = await fetch(`${API}/api/elixir/unblock/${bank}`, {
+          method: "POST",
+          headers: {
+            "Accept": "text/plain, application/xml, */*"
+          }
+        });
+
+        const text = await response.text();
+        message.textContent = text || "Bank odblokowany.";
+
+        await refreshWorkerView();
+      } catch (err) {
+        message.textContent = "Błąd podczas odblokowania banku.";
+      }
+    }
+
+    function openPopup(bank, balance, limit, isBlocked) {
+      const popup = document.getElementById("popup-overlay");
+      const popupText = document.getElementById("popup-text");
+
+      popupText.textContent =
+        `Bank ${bank} przekroczył limit zadłużenia lub został zablokowany. ` +
+        `Saldo: ${formatMoney(balance, "PLN")}, limit: ${formatMoney(limit, "PLN")}. ` +
+        (isBlocked ? "Bank jest obecnie zablokowany." : "Wymagane uzupełnienie środków.");
+
+      popup.classList.remove("hidden");
+    }
+
+    function closePopup() {
+      document.getElementById("popup-overlay").classList.add("hidden");
+    }
+
+    function formatMoney(value, currency = "PLN") {
+      if (value === null || value === undefined || value === "" || isNaN(Number(value))) return "-";
+      return `${Number(value).toFixed(2)} ${currency || "PLN"}`;
+    }
+
+    function formatDate(value) {
+      if (!value) return "-";
+      return String(value).replace("T", " ");
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    loadPayments();
+    refreshWorkerView();
+    //setInterval(refreshWorkerView, 5000);
+  </script>
+</body>
+</html>

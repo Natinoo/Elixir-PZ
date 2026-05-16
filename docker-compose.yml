@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   kafka:
     image: apache/kafka:4.0.0
@@ -51,13 +49,11 @@ services:
       - "9000:9000"
     command: |
       bash -c '
-      mkdir -p /var/ybinit
-      cat <<EOF > /var/ybinit/01-init.sql
-      CREATE DATABASE elixir;
-      CREATE DATABASE sorbnet;
-      EOF
-      bin/yugabyted start --daemon=false --initial_scripts_dir=/var/ybinit
-      '
+          mkdir -p /var/ybinit
+          echo "CREATE DATABASE sorbnet;" > /var/ybinit/01-db.sql
+          echo "CREATE DATABASE elixir;" > /var/ybinit/02-db.sql
+          bin/yugabyted start --daemon=false --initial_scripts_dir=/var/ybinit
+          '
     healthcheck:
       test: ["CMD-SHELL", "bin/ysqlsh -h $(hostname -i) -U yugabyte -d yugabyte -tAc 'SELECT 1' >/dev/null 2>&1"]
       interval: 10s

@@ -5,13 +5,19 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PostPersist;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+import org.springframework.data.domain.Persistable;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "payments")
-public class Payment {
+public class Payment implements Persistable<String> {
 
     @Id
     @Column(name = "payment_id", nullable = false, updatable = false)
@@ -39,6 +45,9 @@ public class Payment {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    @Transient
+    private boolean isNew = true;
+
     public Payment() {
     }
 
@@ -60,6 +69,36 @@ public class Payment {
         this.title = title;
         this.status = status;
         this.createdAt = createdAt;
+        this.isNew = true;
+    }
+
+    @PrePersist
+    public void prePersist() {
+        if (this.paymentId == null || this.paymentId.isBlank()) {
+            this.paymentId = UUID.randomUUID().toString();
+        }
+        if (this.status == null) {
+            this.status = PaymentStatus.QUEUED;
+        }
+        if (this.createdAt == null) {
+            this.createdAt = LocalDateTime.now();
+        }
+    }
+
+    @PostPersist
+    @PostLoad
+    public void markNotNew() {
+        this.isNew = false;
+    }
+
+    @Override
+    public String getId() {
+        return paymentId;
+    }
+
+    @Override
+    public boolean isNew() {
+        return isNew;
     }
 
     public String getPaymentId() {
