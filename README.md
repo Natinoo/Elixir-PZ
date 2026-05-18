@@ -102,7 +102,14 @@ Projekt jest przygotowany do uruchomienia przy pomocy Docker Compose.
    ```bash
    ./stop.bat
    ```
-
+## Dokumentacja API / Swagger / OpenAPI
+Po urchomieniu kontenera, dokumnetacje api dostępne są przez swagger pod adresami
+Elixir:
+http://localhost:8081/swagger-ui/index.html (/v3/api-docs- to wpisac tam na gorze by dzialalo * do poprawki)
+Elxiir-express:
+http://localhost:8082/swagger-ui/index.html
+Sorbnet:
+http://localhost:8083/swagger-ui/index.html
 ## Technologie
 
 W projekcie wykorzystano:
@@ -132,9 +139,3 @@ Planowane uzupełnienia dokumentacji:
 - [do-wstawienia] diagram UML komponentów
 - [do-wstawienia] diagram sekwencji przepływu płatności
 - [do-wstawienia] diagram BPMN procesu obsługi płatności
-## Dokumentacja API / Swagger / OpenAPI
-Elixir:
-http://localhost:8081/swagger-ui/index.html (/v3/api-docs- to wpisac tam na gorze by dzialalo * do poprawki)
-Elxiir-express:
-Sorbnet:
-http://localhost:8083/swagger-ui/index.html
