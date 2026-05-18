@@ -103,13 +103,18 @@ Projekt jest przygotowany do uruchomienia przy pomocy Docker Compose.
    ./stop.bat
    ```
 ## Dokumentacja API / Swagger / OpenAPI
-Po urchomieniu kontenera, dokumnetacje api dostępne są przez swagger pod adresami
-Elixir:
-http://localhost:8081/swagger-ui/index.html (/v3/api-docs- to wpisac tam na gorze by dzialalo * do poprawki)
-Elxiir-express:
-http://localhost:8082/swagger-ui/index.html
-Sorbnet:
-http://localhost:8083/swagger-ui/index.html
+
+Po uruchomieniu kontenera dokumentacje API dostępne są przez Swagger pod adresami:
+
+- **Elixir**  
+  http://localhost:8081/swagger-ui/index.html  
+  (`/v3/api-docs` trzeba wpisać u góry w Swaggerze, aby działało — do poprawki)
+
+- **Elixir-Express**  
+  http://localhost:8082/swagger-ui/index.html
+
+- **Sorbnet**  
+  http://localhost:8083/swagger-ui/index.html
 ## Technologie
 
 W projekcie wykorzystano:
