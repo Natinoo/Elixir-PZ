@@ -15,9 +15,16 @@ public interface PaymentRepository extends JpaRepository<Payment, String> {
 
     List<Payment> findBySenderBankIdOrReceiverBankId(String senderId, String receiverId);
 
-    List<Payment> findBySenderBankIdOrReceiverBankIdAndCreatedAtBetween(
-        String senderId, String receiverId,
-        LocalDateTime from, LocalDateTime to
+    @Query("""
+    SELECT p FROM Payment p
+    WHERE (p.senderBankId = :bankId OR p.receiverBankId = :bankId)
+      AND p.createdAt BETWEEN :from AND :to
+    ORDER BY p.createdAt DESC
+    """)
+    List<Payment> findByBankIdAndFromBetween(
+    @Param("bankId") String bankId,
+    @Param("from") LocalDateTime from,
+    @Param("to") LocalDateTime to
     );
     List<Payment> findByStatusAndSettledAtAfter(PaymentStatus status, LocalDateTime after);
     @Query("SELECT p FROM Payment p WHERE (p.senderBankId = :bankId OR p.receiverBankId = :bankId) AND p.createdAt >= :from ORDER BY p.createdAt DESC")
