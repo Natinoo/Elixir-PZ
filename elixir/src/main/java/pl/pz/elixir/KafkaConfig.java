@@ -16,10 +16,10 @@ public class KafkaConfig {
                 .build();
     }
     @Bean
-    public NewTopic settlementTopic() {
-    return TopicBuilder.name("payments.sorbnet.settlement")
-            .partitions(1)
-            .replicas(1)
-            .build();
-}
+    public NewTopic sorbnetTopic() {
+        return TopicBuilder.name("payments.sorbnet")
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
 }

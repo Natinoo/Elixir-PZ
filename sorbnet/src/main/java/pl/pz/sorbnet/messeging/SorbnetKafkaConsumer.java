@@ -16,7 +16,11 @@ public class SorbnetKafkaConsumer {
     public SorbnetKafkaConsumer(ObjectMapper mapper) {
         this.mapper = mapper;
     }
-
+    @KafkaListener(topics = "payments.sorbnet", groupId = "sorbnet-group")
+    public void onPayment(ConsumerRecord<String, String> record) {
+        log.info("[PAYMENT] key={} payload={}", record.key(), record.value());
+    }
+    
     @KafkaListener(topics = "notifications.banks", groupId = "sorbnet-group")
     public void onSettlement(ConsumerRecord<String, String> record) {
         log.info("[SETTLEMENT] bank={} payload={}", record.key(), record.value());

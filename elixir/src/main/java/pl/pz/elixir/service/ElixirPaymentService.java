@@ -58,11 +58,8 @@ public class ElixirPaymentService {
 
         String payload = toXml(paymentDto);
 
-        kafkaTemplate.send(
-                "payments.elixir",
-                paymentDto.getPaymentId(),
-                payload
-        );
+        kafkaTemplate.send("payments.elixir", paymentDto.getPaymentId(), payload);
+        kafkaTemplate.send("payments.sorbnet", paymentDto.getPaymentId(), payload);
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("paymentId", paymentDto.getPaymentId());
