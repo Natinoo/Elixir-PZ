@@ -13,7 +13,8 @@ import jakarta.xml.bind.annotation.*;
         "receiverBankId",
         "senderAccount",
         "receiverAccount",
-        "title"
+        "title",
+        "status"
 })
 public class SorbnetPaymentDto {
 
@@ -25,6 +26,7 @@ public class SorbnetPaymentDto {
     private String senderAccount;
     private String receiverAccount;
     private String title;
+    private String status;
 
     public SorbnetPaymentDto() {}
 
@@ -91,4 +93,6 @@ public class SorbnetPaymentDto {
     public void setTitle(String title) {
         this.title = title;
     }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 }

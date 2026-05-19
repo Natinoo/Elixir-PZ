@@ -1,266 +1,247 @@
-import { useState, useEffect } from 'react';
-import { fetchBankInfo, fetchPayments, sendPayment } from '../api/sorbnetApi';
-import { useWebSocket } from '../hooks/useWebSocket';
+import { useEffect, useState, useCallback } from 'react';
+import { connectWebSocket, fetchPayments, fetchAccountStatus, simulateDeposit } from '../api/sorbnetApi';
+import PaymentsList from './PaymentsList';
 import AlertPopup from './AlertPopup';
 import OverlimitCountdown from './OverlimitCountdown';
-const BANK_ID = 'PKO'; // ← zmień na swój bank
 
-export default function Dashboard() {
-  const bankId = BANK_ID;
-  const [bank, setBank] = useState(null);
-  const [payments, setPayments] = useState([]);
-  const [loadingBank, setLoadingBank] = useState(true);
-  const [loadingPayments, setLoadingPayments] = useState(true);
-  const [alert, setAlert] = useState(null);
-  const [daysBack, setDaysBack] = useState(1);
-  const [topupAmount, setTopupAmount] = useState('');
-  const [topupSender, setTopupSender] = useState('NBP');
-  const [topupLoading, setTopupLoading] = useState(false);
-  const [topupMsg, setTopupMsg] = useState(null);
+const PERIODS = [
+  { label: 'Dziś',    days: 0 },
+  { label: '7 dni',   days: 7 },
+  { label: '30 dni',  days: 30 },
+];
 
-  const loadBank = () =>
-    fetchBankInfo(bankId)
-      .then(data => setBank(data || { bankId, bankName: bankId, balance: 0, debtLimit: 0, blocked: false }))
-      .catch(() => setBank({ bankId, bankName: bankId, balance: 0, debtLimit: 0, blocked: false }))
-      .finally(() => setLoadingBank(false));
+export default function Dashboard({ bankId }) {
+  const [account, setAccount]           = useState(null);
+  const [payments, setPayments]         = useState([]);
+  const [alert, setAlert]               = useState(null);
+  const [period, setPeriod]             = useState(0);       // dni historii
+  const [depositAmount, setDepositAmount] = useState('');
+  const [depositLoading, setDepositLoading] = useState(false);
+  const [connected, setConnected]       = useState(false);
+  const [gridlockActive, setGridlockActive] = useState(false);
 
-  const loadPayments = () => {
-  setLoadingPayments(true);
-  fetchPayments(bankId, daysBack)  
-    .then(setPayments)
-    .catch(() => setPayments([]))
-    .finally(() => setLoadingPayments(false));
-};
+  const refreshAccount = useCallback(() =>
+    fetchAccountStatus(bankId).then(setAccount).catch(console.error),
+  [bankId]);
 
-  useEffect(() => { loadBank(); }, []);
-  useEffect(() => { loadPayments(); }, [daysBack]);
+  const refreshPayments = useCallback((days) =>
+    fetchPayments(bankId, days).then(setPayments).catch(console.error),
+  [bankId]);
 
-  useWebSocket([`/topic/alerts/${bankId}`], (topic, msg) => {
-    setAlert(msg);
-    loadBank();
-    loadPayments();
-  });
+  // inicjalne załadowanie
+  useEffect(() => {
+    refreshAccount();
+    refreshPayments(period);
+  }, [bankId]);
 
-  const handleTopup = async () => {
-    if (!topupAmount || isNaN(topupAmount) || parseFloat(topupAmount) <= 0) return;
-    setTopupLoading(true);
-    setTopupMsg(null);
+  // zmiana okresu historii
+  useEffect(() => {
+    refreshPayments(period);
+  }, [period]);
+
+  // WebSocket
+  useEffect(() => {
+    const client = connectWebSocket({
+      bankId,
+      onPayment: (payment) => {
+        // wstaw lub zaktualizuj na liście
+        setPayments((prev) => {
+          const exists = prev.some(p => p.paymentId === payment.paymentId);
+          return exists
+            ? prev.map(p => p.paymentId === payment.paymentId ? payment : p)
+            : [payment, ...prev];
+        });
+        refreshAccount();
+        // wyczyść gridlock jeśli płatność przeszła
+        if (payment.status === 'SETTLED') setGridlockActive(false);
+      },
+      onAlert: (alertData) => {
+        if (alertData.type === 'DEBT_LIMIT_EXCEEDED') {
+          setAlert(alertData);
+          setGridlockActive(true);
+        } else if (alertData.type === 'APPROACHING_DEBT_LIMIT') {
+          setAlert(alertData);
+        } else if (alertData.alert === false) {
+          // saldo OK — ukryj alert jeśli był
+          setAlert(null);
+          setGridlockActive(false);
+        }
+        refreshAccount();
+      },
+      onConnect: () => setConnected(true),
+      onDisconnect: () => setConnected(false),
+    });
+    return () => client.deactivate();
+  }, [bankId]);
+
+  const handleDeposit = async () => {
+    if (!depositAmount || isNaN(depositAmount)) return;
+    setDepositLoading(true);
     try {
-      await sendPayment({
-        senderBankId: topupSender,
-        receiverBankId: bankId,
-        amount: parseFloat(topupAmount),
-        title: 'Dokapitalizowanie rachunku rozliczeniowego'
-      });
-      setTopupMsg({ type: 'success', text: `Przelew ${fmt(parseFloat(topupAmount))} z ${topupSender} wysłany pomyślnie.` });
-      setTopupAmount('');
-      setTimeout(() => { loadBank(); loadPayments(); }, 1000);
-    } catch {
-      setTopupMsg({ type: 'error', text: 'Błąd wysyłania przelewu. Sprawdź czy bank nadawcy jest aktywny.' });
+      await simulateDeposit(bankId, parseFloat(depositAmount));
+      setDepositAmount('');
+      const updated = await fetchAccountStatus(bankId);
+      setAccount(updated);
+      if (updated.balance >= -updated.debtLimit) {
+        setAlert(null);
+        setGridlockActive(false);
+      }
+    } catch (e) {
+      console.error(e);
     } finally {
-      setTopupLoading(false);
+      setDepositLoading(false);
     }
   };
 
-  const fmt = (n) => new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(n ?? 0);
-  const fmtDate = (d) => d ? new Date(d).toLocaleString('pl-PL') : '—';
-
-  const isOverlimit = bank && bank.balance < -(bank.debtLimit ?? 0);
-  const shortfall = bank ? Math.max(0, -bank.balance - (bank.debtLimit ?? 0)) : 0;
-
-  const STATUS_LABELS = {
-    SETTLED: { label: 'Rozliczony', cls: 'badge-success' },
-    PENDING: { label: 'Oczekujący', cls: 'badge-neutral' },
-    GRIDLOCK_HELD: { label: 'Gridlock', cls: 'badge-warning' },
-    REJECTED: { label: 'Odrzucony', cls: 'badge-error' },
-  };
-
-  if (loadingBank) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100dvh', color: 'var(--color-text-muted)' }}>
-      Ładowanie...
-    </div>
-  );
-
-  if (!bank && !loadingBank) return (
-  <p style={{ padding: '2rem' }}>Nie znaleziono banku: {bankId}</p>
-  );
+  const debtUsedPct   = account ? Math.min(100, Math.max(0, (-account.balance / account.debtLimit) * 100)) : 0;
+  const isOverlimit   = account && account.balance < -account.debtLimit;
+  const isApproaching = account && !isOverlimit && account.balance < -(account.debtLimit * 0.8);
 
   return (
-    <div className="layout">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-logo">SORBNET</div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', padding: '0 var(--space-2)' }}>Zalogowany jako</div>
-        <div style={{ fontWeight: 700, marginBottom: 'var(--space-6)', padding: '0 var(--space-2)', fontSize: '1.1rem' }}>{bankId}</div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', padding: '0 var(--space-2)', marginBottom: 'var(--space-1)' }}>Saldo</div>
-        <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', padding: '0 var(--space-2)', marginBottom: 'var(--space-4)', color: bank.balance < 0 ? 'var(--color-error)' : 'var(--color-success)', fontSize: '0.95rem' }}>
-          {fmt(bank.balance)}
+    <div className="dashboard">
+      {/* Header */}
+      <header className="dash-header">
+        <div className="dash-header__left">
+          <svg className="dash-logo" viewBox="0 0 32 32" fill="none" aria-label="SORBNET">
+            <rect x="2" y="14" width="28" height="4" fill="currentColor" opacity="0.9"/>
+            <rect x="6"  y="8"  width="4" height="16" fill="currentColor"/>
+            <rect x="14" y="8"  width="4" height="16" fill="currentColor"/>
+            <rect x="22" y="8"  width="4" height="16" fill="currentColor"/>
+            <rect x="2"  y="22" width="28" height="2"  fill="currentColor" opacity="0.5"/>
+          </svg>
+          <span className="dash-header__title">SORBNET RTGS — Panel banku</span>
+          <span className="dash-header__bank">{bankId}</span>
         </div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', padding: '0 var(--space-2)', marginBottom: 'var(--space-1)' }}>Limit zadłużenia</div>
-        <div style={{ fontVariantNumeric: 'tabular-nums', padding: '0 var(--space-2)', marginBottom: 'var(--space-6)', fontSize: '0.9rem' }}>
-          {fmt(bank.debtLimit)}
-        </div>
-        <div style={{ padding: '0 var(--space-2)' }}>
-          <span className={`badge ${bank.blocked ? 'badge-error' : isOverlimit ? 'badge-warning' : 'badge-success'}`}>
-            {bank.blocked ? 'ZABLOKOWANY' : isOverlimit ? 'PONAD LIMIT' : 'AKTYWNY'}
-          </span>
-        </div>
-      </aside>
+        <span className={`ws-badge ${connected ? 'ws-badge--on' : 'ws-badge--off'}`}>
+          <span className="ws-badge__dot" />
+          {connected ? 'Live' : 'Łączenie…'}
+        </span>
+      </header>
 
-      {/* Main */}
-      <main className="main-content">
-
-        {bank.overlimitSince && !bank.blocked && (
-        <div style={{ marginBottom: 'var(--space-6)' }}>
-          <OverlimitCountdown overlimitSince={bank.overlimitSince} />
-        </div>
-        )}
-
-        {/* Alert przy przekroczeniu limitu */}
-        {(isOverlimit || bank.blocked) && (
-          <div className="card" style={{
-            background: bank.blocked ? 'var(--color-error-highlight)' : 'var(--color-warning-highlight)',
-            borderColor: bank.blocked ? 'var(--color-error)' : 'var(--color-warning)',
-            marginBottom: 'var(--space-6)'
-          }}>
-            <div style={{ fontWeight: 700, marginBottom: 'var(--space-2)', color: bank.blocked ? 'var(--color-error)' : 'var(--color-warning)' }}>
-              {bank.blocked ? '🔴 Bank jest zablokowany' : '⚠ Przekroczono limit zadłużenia'}
-            </div>
-            {isOverlimit && !bank.blocked && (
-              <p style={{ fontSize: '0.875rem', marginBottom: 'var(--space-1)' }}>
-                Brakuje <strong>{fmt(shortfall)}</strong> do odzyskania płynności.
-                Minimalna kwota dokapitalizowania: <strong>{fmt(shortfall + 1)}</strong>
-              </p>
-            )}
-            {bank.overlimitSince && (
-              <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                Ponad limit od: {fmtDate(bank.overlimitSince)} — automatyczna blokada po 2h
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Formularz dokapitalizowania */}
-        <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-          <div style={{ fontWeight: 600, marginBottom: 'var(--space-4)' }}>Symulacja dokapitalizowania</div>
-          <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: 'var(--space-1)' }}>Bank nadawcy</label>
-              <select
-                value={topupSender}
-                onChange={e => setTopupSender(e.target.value)}
-                style={{ padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-surface)', font: 'inherit', fontSize: '0.875rem' }}
-              >
-                <option value="NBP">NBP (bank centralny)</option>
-                <option value="ING">ING</option>
-                <option value="PEKAO">PEKAO</option>
-                <option value="MBANK">MBANK</option>
-                <option value="BNP">BNP</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: 'var(--space-1)' }}>Kwota (PLN)</label>
-              <input
-                type="number"
-                placeholder="np. 1000000"
-                value={topupAmount}
-                onChange={e => setTopupAmount(e.target.value)}
-                style={{ padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', font: 'inherit', fontSize: '0.875rem', width: '180px' }}
+      <main className="dash-main">
+        {/* KPI */}
+        <section className="kpi-row">
+          <div className={`kpi-card ${isOverlimit ? 'kpi-card--danger' : isApproaching ? 'kpi-card--warn' : ''}`}>
+            <span className="kpi-card__label">Saldo rozrachunkowe</span>
+            <span className="kpi-card__value">{account ? fmt(account.balance) : '—'}</span>
+            <div className="debt-bar">
+              <div
+                className={`debt-bar__fill ${isOverlimit ? 'debt-bar__fill--danger' : isApproaching ? 'debt-bar__fill--warn' : ''}`}
+                style={{ width: `${debtUsedPct}%` }}
               />
             </div>
-            {isOverlimit && shortfall > 0 && (
-              <button
-                className="btn btn-ghost"
-                style={{ fontSize: '0.8rem' }}
-                onClick={() => setTopupAmount(String(Math.ceil(shortfall + 1)))}
-              >
-                Wstaw minimum ({fmt(shortfall + 1)})
-              </button>
-            )}
-            <button
-              className="btn btn-primary"
-              onClick={handleTopup}
-              disabled={topupLoading || !topupAmount}
-            >
-              {topupLoading ? 'Wysyłanie...' : 'Wyślij przelew'}
-            </button>
+            <span className="kpi-card__sub">
+              Limit zadłużenia: {account ? fmt(account.debtLimit) : '—'}
+              {' · '}
+              Wykorzystanie: {debtUsedPct.toFixed(1)}%
+            </span>
           </div>
-          {topupMsg && (
-            <div style={{ marginTop: 'var(--space-3)', fontSize: '0.875rem', color: topupMsg.type === 'success' ? 'var(--color-success)' : 'var(--color-error)' }}>
-              {topupMsg.text}
+
+          <div className="kpi-card">
+            <span className="kpi-card__label">Dostępny kredyt</span>
+            <span className="kpi-card__value">{account ? fmt(account.availableCredit) : '—'}</span>
+            <span className="kpi-card__sub">{account?.blocked ? '🔒 Bank zablokowany' : '✓ Bank aktywny'}</span>
+          </div>
+
+          <div className="kpi-card">
+            <span className="kpi-card__label">Min. wpłata do przywrócenia</span>
+            <span className={`kpi-card__value ${account?.minDepositToRestore > 0 ? 'kpi-card__value--warn' : ''}`}>
+              {account ? fmt(account.minDepositToRestore) : '—'}
+            </span>
+            <span className="kpi-card__sub">
+              {account?.minDepositToRestore > 0
+                ? 'Wymagana wpłata aby zmieścić się w limicie'
+                : 'Saldo w normie'}
+            </span>
+          </div>
+
+          <div className="kpi-card">
+            <span className="kpi-card__label">Transakcje ({PERIODS.find(p=>p.days===period)?.label})</span>
+            <span className="kpi-card__value">{payments.length}</span>
+            <span className="kpi-card__sub">
+              Rozliczone: {payments.filter(p => p.status === 'SETTLED').length}
+              {' / '}
+              Wstrzymane: {payments.filter(p => p.status === 'GRIDLOCK_HELD').length}
+              {' / '}
+              Odrzucone: {payments.filter(p => p.status === 'REJECTED').length}
+            </span>
+          </div>
+        </section>
+
+        {/* Gridlock resolution info */}
+        {gridlockActive && (
+          <div className="gridlock-banner">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+            <span>
+              Uruchomiono <strong>gridlock resolution</strong> — system próbuje automatycznie rozliczyć wstrzymane przelewy.
+              Jeśli problem nie zostanie rozwiązany, uzupełnij środki ręcznie.
+            </span>
+          </div>
+        )}
+
+        {/* Odliczanie blokady */}
+        {account?.overlimitSince && !account?.blocked && (
+          <OverlimitCountdown overlimitSince={account.overlimitSince} />
+        )}
+
+        {/* Uzupełnienie środków */}
+        <section className="deposit-section">
+          <h2 className="section-title">Uzupełnienie środków na rachunku rozliczeniowym</h2>
+          <div className="deposit-form">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Kwota wpłaty (PLN)"
+              value={depositAmount}
+              onChange={e => setDepositAmount(e.target.value)}
+              className="deposit-input"
+            />
+            <button
+              className="btn btn--primary"
+              onClick={handleDeposit}
+              disabled={depositLoading || !depositAmount}
+            >
+              {depositLoading ? 'Przetwarzanie…' : 'Wpłać środki'}
+            </button>
+            {account?.minDepositToRestore > 0 && (
+              <span className="deposit-hint">
+                Min. wymagana: <strong>{fmt(account.minDepositToRestore)}</strong>
+              </span>
+            )}
+          </div>
+        </section>
+
+        {/* Lista przelewów z filtrem */}
+        <section className="payments-section">
+          <div className="payments-section__header">
+            <h2 className="section-title" style={{marginBottom:0}}>Historia przelewów</h2>
+            <div className="period-tabs">
+              {PERIODS.map(p => (
+                <button
+                  key={p.days}
+                  className={`period-tab ${period === p.days ? 'period-tab--active' : ''}`}
+                  onClick={() => setPeriod(p.days)}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
-          )}
-        </div>
-
-        {/* Historia przelewów */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
-          <h2 style={{ fontSize: '1rem', fontWeight: 600 }}>Historia przelewów</h2>
-          <select
-            value={daysBack}
-            onChange={e => setDaysBack(Number(e.target.value))}
-            style={{ padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-surface)', font: 'inherit', fontSize: '0.875rem' }}
-          >
-            <option value={1}>Dzisiaj</option>
-            <option value={30}>Ostatnie 30 dni</option>
-          </select>
-        </div>
-
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          {loadingPayments ? (
-            <p style={{ padding: '2rem', color: 'var(--color-text-muted)' }}>Ładowanie przelewów...</p>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Kierunek</th>
-                  <th>Kontrahent</th>
-                  <th>Kwota</th>
-                  <th>Tytuł</th>
-                  <th>Status</th>
-                  <th>Data</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payments.map(p => {
-                  const isOut = p.senderBankId === bankId;
-                  const s = STATUS_LABELS[p.status] || { label: p.status, cls: 'badge-neutral' };
-                  return (
-                    <tr key={p.paymentId}>
-                      <td>
-                        <span className={`badge ${isOut ? 'badge-error' : 'badge-success'}`}>
-                          {isOut ? '↑ Wychodzący' : '↓ Przychodzący'}
-                        </span>
-                      </td>
-                      <td>{isOut ? p.receiverBankId : p.senderBankId}</td>
-                      <td style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
-                        <span style={{ color: isOut ? 'var(--color-error)' : 'var(--color-success)' }}>
-                          {isOut ? '−' : '+'}{fmt(p.amount)}
-                        </span>
-                      </td>
-                      <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
-                        {p.title}
-                      </td>
-                      <td><span className={`badge ${s.cls}`}>{s.label}</span></td>
-                      <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                        {fmtDate(p.settledAt || p.createdAt)}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {payments.length === 0 && (
-                  <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
-                      Brak przelewów w wybranym okresie
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
+          </div>
+          <PaymentsList payments={payments} bankId={bankId} />
+        </section>
       </main>
 
-      <AlertPopup alert={alert} onClose={() => setAlert(null)} />
+      {/* Alert popup — tylko przy przekroczeniu limitu */}
+      {alert && <AlertPopup alert={alert} onDismiss={() => setAlert(null)} />}
     </div>
   );
+}
+
+function fmt(val) {
+  if (val == null) return '—';
+  return Number(val).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' PLN';
 }
