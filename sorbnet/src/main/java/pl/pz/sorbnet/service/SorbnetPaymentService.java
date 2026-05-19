@@ -82,6 +82,18 @@ public class SorbnetPaymentService {
         payment.setSettledAt(LocalDateTime.now());
         paymentRepo.save(payment);
 
+        ws.convertAndSend("/topic/payments", Map.of(
+            "paymentId", payment.getPaymentId(),
+            "status", "SETTLED",
+            "senderBankId", payment.getSenderBankId(),
+            "receiverBankId", payment.getReceiverBankId(),
+            "amount", payment.getAmount(),
+            "currency", payment.getCurrency(),
+            "title", payment.getTitle(),
+            "settledAt", payment.getSettledAt().toString()
+        ));
+
+
         String xml = toXml(dto);
         kafka.send("notifications.banks", payment.getReceiverBankId(), xml);
         kafka.send("notifications.banks", payment.getSenderBankId(), xml);

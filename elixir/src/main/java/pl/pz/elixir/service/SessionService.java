@@ -113,47 +113,61 @@ public class SessionService {
     // zamknięcie sesji + netting
     public void closeSession(String sessionName) {
 
-        if (currentSession.isEmpty()) {
-
-            System.out.println(
-                    "=== " + sessionName + " SESSION EMPTY ==="
-            );
-
-            return;
-        }
-
-        System.out.println(
-                "=== CLOSING ELIXIR SESSION: "
-                        + sessionName
-                        + " ==="
-        );
-
-        var result = nettingService.calculateNetting(currentSession);
-
-        // zapis raportu
-        sessionReportService.saveReport(sessionName, result);
-
-        System.out.println("=== NETTING RESULT ===");
-
-        for (String line : result) {
-
-            System.out.println(line);
-
-            kafkaTemplate.send(
-                    "payments.sorbnet.settlement",
-                    line
-            );
-        }
-
-        // update statusów paymentów
-        for (ElixirPaymentDto payment : currentSession) {
-
-            elixirPaymentService.updatePaymentStatus(
-                    payment.getPaymentId(),
-                    PaymentStatus.PROCESSED
-            );
-        }
-
-        currentSession.clear();
+    if (currentSession.isEmpty()) {
+        System.out.println("=== " + sessionName + " SESSION EMPTY ===");
+        return;
     }
+
+    System.out.println("=== CLOSING ELIXIR SESSION: " + sessionName + " ===");
+
+    List<String> nettingResult = nettingService.calculateNetting(currentSession);
+    sessionReportService.saveReport(sessionName, nettingResult);
+
+    System.out.println("=== NETTING RESULT ===");
+
+    for (String line : nettingResult) {
+        System.out.println(line);
+
+        // line = "BANK_A pays BANK_B = 250.0"
+        try {
+            String[] parts = line.split(" pays | = ");
+            // parts[0] = "BANK_A", parts[1] = "BANK_B", parts[2] = "250.0"
+            String sender   = parts[0].trim();
+            String receiver = parts[1].trim();
+            double amount   = Double.parseDouble(parts[2].trim());
+
+            String paymentId = java.util.UUID.randomUUID().toString();
+
+            // XML zgodny z @XmlRootElement(name = "ElixirPaymentDto") w SORBNET
+            String xml = String.format(
+                """
+                <ElixirPaymentDto>\
+                <paymentId>%s</paymentId>\
+                <amount>%s</amount>\
+                <currency>PLN</currency>\
+                <senderAccount>%s</senderAccount>\
+                <receiverAccount>%s</receiverAccount>\
+                <title>Netting %s</title>\
+                </ElixirPaymentDto>""",
+                paymentId, amount, sender, receiver, sessionName
+            );
+
+            kafkaTemplate.send("payments.sorbnet", paymentId, xml);
+            System.out.println("[ELIXIR→SORBNET] sent netting: " + line);
+
+        } catch (Exception e) {
+            System.err.println("[ELIXIR→SORBNET] parse error for line: " + line + " — " + e.getMessage());
+        }
+    }
+
+    // update statusów surowych przelewów
+    for (ElixirPaymentDto payment : currentSession) {
+        elixirPaymentService.updatePaymentStatus(
+                payment.getPaymentId(),
+                PaymentStatus.PROCESSED
+        );
+    }
+
+    currentSession.clear();
+}
 }

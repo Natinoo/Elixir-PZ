@@ -1,7 +1,8 @@
 import Dashboard from './components/Dashboard';
 
-const BANK_ID = 'PKO'; // kazdy zespoł zmienia na swoj bank
+const params = new URLSearchParams(window.location.search);
+const bankId = params.get('bank') || 'BANK_A';
 
 export default function App() {
-  return <Dashboard bankId={BANK_ID} onLogout={() => {}} />;
+  return <Dashboard bankId={bankId} />;
 }

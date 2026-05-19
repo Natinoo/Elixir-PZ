@@ -37,13 +37,14 @@ public class SorbnetPaymentController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from) {
 
-        LocalDateTime maxFrom = LocalDateTime.now().minusMonths(1);
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime maxFrom = now.minusMonths(1);
         LocalDateTime start = from == null
                 ? LocalDate.now().atStartOfDay()
                 : from.atStartOfDay();
         if (start.isBefore(maxFrom)) start = maxFrom;
 
-        return paymentRepo.findByBankIdAndFrom(bankId, start);
+        return paymentRepo.findByBankIdAndFromBetween(bankId, start, now);
     }
 
     @GetMapping("/{paymentId}")
