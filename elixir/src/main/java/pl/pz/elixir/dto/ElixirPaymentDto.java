@@ -1,4 +1,9 @@
 package pl.pz.elixir.dto;
+
+import jakarta.xml.bind.annotation.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.xml.bind.annotation.*;
 
 @XmlRootElement(name = "Payment")
@@ -11,20 +16,31 @@ import jakarta.xml.bind.annotation.*;
         "receiverAccount",
         "title"
 })
-
 public class ElixirPaymentDto {
+
     private String paymentId;
+
+    @NotNull(message = "Kwota jest wymagana")
+    @Positive(message = "Kwota musi być większa od zera")
     private Double amount;
+
+    @NotBlank(message = "Waluta jest wymagana")
     private String currency;
+
+    @NotBlank(message = "Bank nadawcy jest wymagany")
     private String senderAccount;
+
+    @NotBlank(message = "Bank odbiorcy jest wymagany")
     private String receiverAccount;
+
+    @NotBlank(message = "Tytuł jest wymagany")
     private String title;
 
     public ElixirPaymentDto() {
     }
 
     public ElixirPaymentDto(String paymentId, Double amount, String currency, String senderAccount,
-                      String receiverAccount, String title) {
+                            String receiverAccount, String title) {
         this.paymentId = paymentId;
         this.amount = amount;
         this.currency = currency;
