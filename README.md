@@ -118,11 +118,13 @@ Po uruchomieniu kontenera dokumentacje API dostępne są przez Swagger pod adres
 ## Technologie
 
 ## GUI
-- **Sorbnet**  
--gui pracownika banku
-http://localhost:5173/
--gui operatora banku
-http://localhost:5174/
+
+- **Sorbnet**
+  - GUI pracownika banku  
+    http://localhost:5173/
+
+  - GUI operatora banku  
+    http://localhost:5174/
 
 
 W projekcie wykorzystano:
