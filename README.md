@@ -126,6 +126,7 @@ Po uruchomieniu kontenera dokumentacje API dostępne są przez Swagger pod adres
   - GUI operatora banku  
     http://localhost:5174/
 
+## Technologie
 
 W projekcie wykorzystano:
 
