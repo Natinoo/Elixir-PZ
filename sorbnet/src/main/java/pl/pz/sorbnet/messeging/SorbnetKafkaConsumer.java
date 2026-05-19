@@ -50,11 +50,7 @@ public class SorbnetKafkaConsumer {
             log.error("[PAYMENT] processing error: {}", record.value(), e);
         }
     }
-    @KafkaListener(topics = "payments.sorbnet", groupId = "sorbnet-group")
-    public void onPayment(ConsumerRecord<String, String> record) {
-        log.info("[PAYMENT] key={} payload={}", record.key(), record.value());
-    }
-    
+
     @KafkaListener(topics = "notifications.banks", groupId = "sorbnet-group")
     public void onSettlement(ConsumerRecord<String, String> record) {
         log.info("[SETTLEMENT] bank={} payload={}", record.key(), record.value());
