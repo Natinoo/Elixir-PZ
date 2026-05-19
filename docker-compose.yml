@@ -106,5 +106,27 @@ services:
       SPRING_DATASOURCE_USERNAME: yugabyte
       SPRING_DATASOURCE_PASSWORD: yugabyte
 
+  sorbnet_banks_gui:
+    build: ./sorbnet-bank-ui
+    container_name: sorbnet_banks_gui
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./sorbnet-bank-ui:/app
+      - sorbnet_banks_node_modules:/app/node_modules
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+
+  sorbnet_operator_gui:
+    build: ./sorbnet-operator-ui
+    container_name: sorbnet_operator_gui
+    ports:
+      - "5174:5174"
+    volumes:
+      - ./sorbnet-operator-ui:/app
+      - sorbnet_operator_node_modules:/app/node_modules
+    command: npm run dev -- --host 0.0.0.0 --port 5174
+        
 volumes:
   yugabyte_data:
+  sorbnet_banks_node_modules:
+  sorbnet_operator_node_modules:
