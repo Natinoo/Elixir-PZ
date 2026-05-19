@@ -1,6 +1,8 @@
 package pl.pz.elixir.service;
 
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -14,6 +16,8 @@ import java.util.List;
 public class SessionService {
 
     private final List<ElixirPaymentDto> currentSession = new ArrayList<>();
+    @Value("${elixir.session.test-mode:false}")
+    private boolean testModeEnabled;
 
     private final NettingService nettingService;
 
@@ -45,7 +49,7 @@ public class SessionService {
     }
 
     // dodawanie przelewów do sesji
-    public void addToSession(String xml) {
+    public synchronized  void addToSession(String xml) {
 
         try {
 
@@ -107,11 +111,13 @@ public class SessionService {
     // TRYB TESTOWY
     @Scheduled(fixedRateString = "${elixir.session.interval:600000}")
     public void testSession() {
-        closeSession("TEST");
+        if (testModeEnabled) {
+            closeSession("TEST");
+        }
     }
 
     // zamknięcie sesji + netting
-    public void closeSession(String sessionName) {
+    public synchronized  void closeSession(String sessionName) {
 
     if (currentSession.isEmpty()) {
         System.out.println("=== " + sessionName + " SESSION EMPTY ===");
