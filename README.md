@@ -117,6 +117,14 @@ Po uruchomieniu kontenera dokumentacje API dostępne są przez Swagger pod adres
   http://localhost:8083/swagger-ui/index.html
 ## Technologie
 
+## GUI
+- **Sorbnet**  
+-gui pracownika banku
+http://localhost:5173/
+-gui operatora banku
+http://localhost:5174/
+
+
 W projekcie wykorzystano:
 
 - **Java 17 / Spring Boot 3**
