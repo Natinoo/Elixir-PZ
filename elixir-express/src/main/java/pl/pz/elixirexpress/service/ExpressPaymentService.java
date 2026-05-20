@@ -34,14 +34,15 @@ public class ExpressPaymentService {
         }
 
         Payment payment = new Payment(
-                paymentDto.getPaymentId(),
                 paymentDto.getSenderAccount(),
                 paymentDto.getReceiverAccount(),
                 paymentDto.getAmount(),
                 paymentDto.getCurrency(),
-                paymentDto.getTitle(),
-                PaymentStatus.ACCEPTED
+                paymentDto.getTitle()
         );
+
+        payment.setPaymentId(paymentDto.getPaymentId());
+        payment.setStatus(PaymentStatus.QUEUED);
 
         payments.add(payment);
 
@@ -51,8 +52,9 @@ public class ExpressPaymentService {
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("paymentId", paymentDto.getPaymentId());
-        response.put("status", PaymentStatus.ACCEPTED.name());
+        response.put("status", PaymentStatus.QUEUED.name());
         response.put("channel", "EXPRESS");
+
         return response;
     }
 
@@ -69,30 +71,35 @@ public class ExpressPaymentService {
 
     public List<Payment> getPaymentsByStatus(PaymentStatus status) {
         List<Payment> result = new ArrayList<>();
+
         for (Payment payment : payments) {
             if (payment.getStatus() == status) {
                 result.add(payment);
             }
         }
+
         return result;
     }
 
     public boolean cancelPayment(String paymentId) {
         Payment payment = getPaymentById(paymentId);
+
         if (payment == null) {
             return false;
         }
 
-        if (payment.getStatus() == PaymentStatus.PROCESSED || payment.getStatus() == PaymentStatus.SENT) {
+        if (payment.getStatus() == PaymentStatus.PROCESSED) {
             return false;
         }
 
-        payment.setStatus(PaymentStatus.CANCELLED);
+        payment.setStatus(PaymentStatus.REJECTED);
+
         return true;
     }
 
     public void updatePaymentStatus(String paymentId, PaymentStatus status) {
         Payment payment = getPaymentById(paymentId);
+
         if (payment != null) {
             payment.setStatus(status);
         }
@@ -110,15 +117,19 @@ public class ExpressPaymentService {
         if (paymentDto.getAmount() == null || paymentDto.getAmount() <= 0) {
             throw new IllegalArgumentException("Amount must be greater than 0");
         }
+
         if (paymentDto.getCurrency() == null || paymentDto.getCurrency().isBlank()) {
             throw new IllegalArgumentException("Currency is required");
         }
+
         if (paymentDto.getSenderAccount() == null || paymentDto.getSenderAccount().isBlank()) {
             throw new IllegalArgumentException("Sender account is required");
         }
+
         if (paymentDto.getReceiverAccount() == null || paymentDto.getReceiverAccount().isBlank()) {
             throw new IllegalArgumentException("Receiver account is required");
         }
+
         if (paymentDto.getTitle() == null || paymentDto.getTitle().isBlank()) {
             throw new IllegalArgumentException("Title is required");
         }

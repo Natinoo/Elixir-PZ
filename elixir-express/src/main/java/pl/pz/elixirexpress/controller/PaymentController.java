@@ -1,12 +1,11 @@
-package pl.pz.elixir;
+package pl.pz.elixirexpress.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import pl.pz.elixir.dto.ElixirPaymentDto;
-import pl.pz.elixir.model.Payment;
-import pl.pz.elixir.model.PaymentStatus;
-import pl.pz.elixir.service.ElixirPaymentService;
-import pl.pz.elixir.service.SessionService;
+import pl.pz.elixirexpress.dto.ExpressPaymentDto;
+import pl.pz.elixirexpress.model.Payment;
+import pl.pz.elixirexpress.model.PaymentStatus;
+import pl.pz.elixirexpress.service.ExpressPaymentService;
 
 import java.util.List;
 import java.util.Map;
@@ -15,46 +14,43 @@ import java.util.Map;
 @RequestMapping("/api")
 public class PaymentController {
 
-    private final ElixirPaymentService elixirPaymentService;
-    private final SessionService sessionService;
+    private final ExpressPaymentService expressPaymentService;
 
-    public PaymentController(ElixirPaymentService elixirPaymentService,
-                             SessionService sessionService) {
-        this.elixirPaymentService = elixirPaymentService;
-        this.sessionService = sessionService;
+    public PaymentController(ExpressPaymentService expressPaymentService) {
+        this.expressPaymentService = expressPaymentService;
     }
 
     @PostMapping("/payments")
-    public ResponseEntity<Map<String, Object>> createPayment(@RequestBody ElixirPaymentDto paymentDto) {
-        return ResponseEntity.ok(elixirPaymentService.processPayment(paymentDto));
+    public ResponseEntity<Map<String, Object>> createPayment(
+            @RequestBody ExpressPaymentDto paymentDto) {
+
+        return ResponseEntity.ok(
+                expressPaymentService.processPayment(paymentDto)
+        );
     }
 
     @GetMapping("/payments")
     public ResponseEntity<List<Payment>> getAllPayments() {
-        return ResponseEntity.ok(elixirPaymentService.getAllPayments());
+
+        return ResponseEntity.ok(
+                expressPaymentService.getAllPayments()
+        );
     }
 
     @GetMapping("/payments/status/{status}")
-    public ResponseEntity<List<Payment>> getPaymentsByStatus(@PathVariable String status) {
+    public ResponseEntity<List<Payment>> getPaymentsByStatus(
+            @PathVariable String status) {
+
         try {
-            PaymentStatus paymentStatus = PaymentStatus.valueOf(status.toUpperCase());
-            return ResponseEntity.ok(elixirPaymentService.getPaymentsByStatus(paymentStatus));
+            PaymentStatus paymentStatus =
+                    PaymentStatus.valueOf(status.toUpperCase());
+
+            return ResponseEntity.ok(
+                    expressPaymentService.getPaymentsByStatus(paymentStatus)
+            );
+
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
         }
-    }
-
-    @GetMapping("/session")
-    public ResponseEntity<?> getCurrentSession() {
-        return ResponseEntity.ok(sessionService.getCurrentSession());
-    }
-
-    @PostMapping("/session/close/{name}")
-    public ResponseEntity<Map<String, String>> closeSession(@PathVariable String name) {
-        sessionService.closeSession(name.toUpperCase());
-        return ResponseEntity.ok(Map.of(
-                "status", "SESSION_CLOSED",
-                "session", name.toUpperCase()
-        ));
     }
 }

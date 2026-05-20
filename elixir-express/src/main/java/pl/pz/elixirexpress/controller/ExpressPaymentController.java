@@ -1,4 +1,4 @@
-package pl.pz.elixirexpress;
+package pl.pz.elixirexpress.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
