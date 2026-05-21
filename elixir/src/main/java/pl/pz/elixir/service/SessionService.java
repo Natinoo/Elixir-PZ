@@ -2,6 +2,8 @@ package pl.pz.elixir.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -15,6 +17,8 @@ import java.util.UUID;
 
 @Service
 public class SessionService {
+
+    private static final Logger log = LoggerFactory.getLogger(SessionService.class);
 
     private final List<ElixirPaymentDto> currentSession = new ArrayList<>();
 
@@ -48,12 +52,17 @@ public class SessionService {
     }
 
     public synchronized void addToSession(String xml) {
+        log.info("addToSession invoked");
+        log.info("Incoming XML: {}", xml);
+
         try {
             ElixirPaymentDto payment = xmlMapper.readValue(xml, ElixirPaymentDto.class);
+            log.info("Parsed paymentId: {}", payment.getPaymentId());
+
             String sender = payment.getSenderAccount();
 
             if (bankLiquidityService.isBlocked(sender)) {
-                System.out.println("BLOCKED BANK: " + sender);
+                log.warn("BLOCKED BANK: {}", sender);
                 elixirPaymentService.updatePaymentStatus(payment.getPaymentId(), PaymentStatus.BLOCKED);
                 return;
             }
@@ -65,10 +74,10 @@ public class SessionService {
             );
 
             currentSession.add(payment);
-
-            System.out.println("Added to session. Current size: " + currentSession.size());
+            log.info("Added to session. Current size: {}", currentSession.size());
 
         } catch (Exception e) {
+            log.error("XML parse error in addToSession", e);
             throw new RuntimeException("XML parse error", e);
         }
     }
@@ -91,25 +100,26 @@ public class SessionService {
     @Scheduled(fixedRateString = "${elixir.session.interval:600000}")
     public void testSession() {
         if (testModeEnabled) {
+            log.info("Test session triggered");
             closeSession("TEST");
         }
     }
 
     public synchronized void closeSession(String sessionName) {
         if (currentSession.isEmpty()) {
-            System.out.println("=== " + sessionName + " SESSION EMPTY ===");
+            log.info("=== {} SESSION EMPTY ===", sessionName);
             return;
         }
 
-        System.out.println("=== CLOSING ELIXIR SESSION: " + sessionName + " ===");
+        log.info("=== CLOSING ELIXIR SESSION: {} ===", sessionName);
 
         List<String> nettingResult = nettingService.calculateNetting(currentSession);
         sessionReportService.saveReport(sessionName, nettingResult);
 
-        System.out.println("=== NETTING RESULT ===");
+        log.info("=== NETTING RESULT ===");
 
         for (String line : nettingResult) {
-            System.out.println(line);
+            log.info(line);
 
             try {
                 String[] parts = line.split(" pays | = ");
@@ -133,10 +143,10 @@ public class SessionService {
                         settlementXml
                 );
 
-                System.out.println("[ELIXIR->SORBNET] sent netting: " + line);
+                log.info("[ELIXIR->SORBNET] sent netting: {}", line);
 
             } catch (Exception e) {
-                System.err.println("[ELIXIR->SORBNET] parse error for line: " + line + " - " + e.getMessage());
+                log.error("[ELIXIR->SORBNET] parse error for line: {}", line, e);
             }
         }
 
@@ -148,12 +158,14 @@ public class SessionService {
         }
 
         currentSession.clear();
+        log.info("Session cleared");
     }
 
     private String toXml(ElixirPaymentDto paymentDto) {
         try {
             return xmlMapper.writeValueAsString(paymentDto);
         } catch (JsonProcessingException e) {
+            log.error("Cannot serialize settlement to XML", e);
             throw new RuntimeException("Cannot serialize settlement to XML", e);
         }
     }
