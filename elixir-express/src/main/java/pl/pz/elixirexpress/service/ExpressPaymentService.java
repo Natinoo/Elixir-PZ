@@ -2,14 +2,16 @@ package pl.pz.elixirexpress.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import pl.pz.elixirexpress.dto.ExpressPaymentDto;
 import pl.pz.elixirexpress.model.Payment;
 import pl.pz.elixirexpress.model.PaymentStatus;
+import pl.pz.elixirexpress.repository.PaymentRepository;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -17,17 +19,27 @@ import java.util.UUID;
 @Service
 public class ExpressPaymentService {
 
+    private static final Logger log = LoggerFactory.getLogger(ExpressPaymentService.class);
+
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final XmlMapper xmlMapper;
-    private final List<Payment> payments = new ArrayList<>();
+    private final PaymentRepository paymentRepository;
+    private volatile boolean gridlockActive = false;
 
-    public ExpressPaymentService(KafkaTemplate<String, String> kafkaTemplate, XmlMapper xmlMapper) {
+    public ExpressPaymentService(KafkaTemplate<String, String> kafkaTemplate,
+                                 XmlMapper xmlMapper,
+                                 PaymentRepository paymentRepository) {
         this.kafkaTemplate = kafkaTemplate;
         this.xmlMapper = xmlMapper;
+        this.paymentRepository = paymentRepository;
     }
 
     public Map<String, Object> processPayment(ExpressPaymentDto paymentDto) {
         validate(paymentDto);
+
+        if (gridlockActive) {
+            throw new IllegalArgumentException("System temporarily unavailable due to gridlock. Try again later.");
+        }
 
         if (paymentDto.getPaymentId() == null || paymentDto.getPaymentId().isBlank()) {
             paymentDto.setPaymentId(UUID.randomUUID().toString());
@@ -40,69 +52,72 @@ public class ExpressPaymentService {
                 paymentDto.getCurrency(),
                 paymentDto.getTitle()
         );
-
         payment.setPaymentId(paymentDto.getPaymentId());
         payment.setStatus(PaymentStatus.QUEUED);
-
-        payments.add(payment);
+        paymentRepository.save(payment);
 
         String payload = toXml(paymentDto);
-
         kafkaTemplate.send("payments.sorbnet", paymentDto.getPaymentId(), payload);
 
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("paymentId", paymentDto.getPaymentId());
-        response.put("status", PaymentStatus.QUEUED.name());
-        response.put("channel", "EXPRESS");
-
-        return response;
+        return Map.of(
+                "paymentId", paymentDto.getPaymentId(),
+                "status", PaymentStatus.QUEUED.name(),
+                "channel", "EXPRESS"
+        );
     }
 
     public List<Payment> getAllPayments() {
-        return payments;
+        return paymentRepository.findAll();
     }
 
     public Payment getPaymentById(String paymentId) {
-        return payments.stream()
-                .filter(payment -> payment.getPaymentId().equals(paymentId))
-                .findFirst()
-                .orElse(null);
+        return paymentRepository.findById(paymentId).orElse(null);
     }
 
     public List<Payment> getPaymentsByStatus(PaymentStatus status) {
-        List<Payment> result = new ArrayList<>();
-
-        for (Payment payment : payments) {
-            if (payment.getStatus() == status) {
-                result.add(payment);
-            }
-        }
-
-        return result;
+        return paymentRepository.findByStatus(status);
     }
 
     public boolean cancelPayment(String paymentId) {
         Payment payment = getPaymentById(paymentId);
-
-        if (payment == null) {
+        if (payment == null || payment.getStatus() == PaymentStatus.PROCESSED) {
             return false;
         }
-
-        if (payment.getStatus() == PaymentStatus.PROCESSED) {
-            return false;
-        }
-
         payment.setStatus(PaymentStatus.REJECTED);
-
+        paymentRepository.save(payment);
         return true;
     }
 
     public void updatePaymentStatus(String paymentId, PaymentStatus status) {
-        Payment payment = getPaymentById(paymentId);
+        paymentRepository.findById(paymentId).ifPresent(p -> {
+            p.setStatus(status);
+            paymentRepository.save(p);
+            log.info("Updated payment {} to status {}", paymentId, status);
+        });
+    }
 
-        if (payment != null) {
-            payment.setStatus(status);
-        }
+    // Obsługa gridlock – nasłuch na topic events.gridlock
+    @KafkaListener(topics = "events.gridlock", groupId = "elixir-express-group")
+    public void handleGridlock(String message) {
+        log.warn("Gridlock event received: {}. Blocking new payments.", message);
+        gridlockActive = true;
+        // W rzeczywistym systemie można uruchomić timer do automatycznego odblokowania
+    }
+
+    @KafkaListener(topics = "events.emergency", groupId = "elixir-express-group")
+    public void handleEmergency(String message) {
+        log.warn("EMERGENCY event received: {}. System in emergency mode – blocking new payments for 5 minutes.", message);
+        gridlockActive = true;
+        // Automatyczne odblokowanie po 5 minutach
+        new Thread(() -> {
+            try {
+                Thread.sleep(300000);
+                gridlockActive = false;
+                log.info("Emergency mode lifted. Payments accepted again.");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }).start();
     }
 
     private String toXml(ExpressPaymentDto paymentDto) {
@@ -117,19 +132,15 @@ public class ExpressPaymentService {
         if (paymentDto.getAmount() == null || paymentDto.getAmount() <= 0) {
             throw new IllegalArgumentException("Amount must be greater than 0");
         }
-
         if (paymentDto.getCurrency() == null || paymentDto.getCurrency().isBlank()) {
             throw new IllegalArgumentException("Currency is required");
         }
-
         if (paymentDto.getSenderAccount() == null || paymentDto.getSenderAccount().isBlank()) {
             throw new IllegalArgumentException("Sender account is required");
         }
-
         if (paymentDto.getReceiverAccount() == null || paymentDto.getReceiverAccount().isBlank()) {
             throw new IllegalArgumentException("Receiver account is required");
         }
-
         if (paymentDto.getTitle() == null || paymentDto.getTitle().isBlank()) {
             throw new IllegalArgumentException("Title is required");
         }
