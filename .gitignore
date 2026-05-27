@@ -27,3 +27,9 @@ Thumbs.db
 
 #vite
 **/.vite/
+
+# Kafka runtime data
+kafka_data/**
+
+# Keep directory placeholder if needed
+!kafka_data/.gitkeep
