@@ -14,6 +14,11 @@ public class KafkaConfig {
     }
 
     @Bean
+    public NewTopic expressPaymentsTopic() {
+        return TopicBuilder.name("payments.express.sorbnet").partitions(1).replicas(1).build();
+    }
+
+    @Bean
     public NewTopic notificationsTopic() {
         return TopicBuilder.name("notifications.banks").partitions(3).replicas(1).build();
     }
@@ -26,5 +31,22 @@ public class KafkaConfig {
     @Bean
     public NewTopic emergencyTopic() {
         return TopicBuilder.name("events.emergency").partitions(1).replicas(1).build();
+    }
+
+    @Bean
+    public NewTopic responsesElixirTopic() {
+        return TopicBuilder.name("responses.elixir").partitions(1).replicas(1).build();
+    }
+
+    @Bean
+    public NewTopic responsesElixirExpressTopic() {
+        return TopicBuilder.name("responses.elixir-express").partitions(1).replicas(1).build();
+    }
+    @Bean
+    public NewTopic elixirResponsesTopic() {
+        return TopicBuilder.name("responses.elixir")
+                .partitions(1)
+                .replicas(1)
+                .build();
     }
 }

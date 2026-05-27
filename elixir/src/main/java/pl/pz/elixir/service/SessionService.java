@@ -2,6 +2,10 @@ package pl.pz.elixir.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+
+import jakarta.xml.bind.JAXBContext;
+import jakarta.xml.bind.Marshaller;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,15 +15,17 @@ import org.springframework.stereotype.Service;
 import pl.pz.elixir.dto.ElixirPaymentDto;
 import pl.pz.elixir.model.PaymentStatus;
 
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @Service
 public class SessionService {
-
     private static final Logger log = LoggerFactory.getLogger(SessionService.class);
-
     private final List<ElixirPaymentDto> currentSession = new ArrayList<>();
 
     @Value("${elixir.session.test-mode:false}")
