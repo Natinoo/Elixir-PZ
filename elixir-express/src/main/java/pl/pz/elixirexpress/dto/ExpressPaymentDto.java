@@ -1,6 +1,9 @@
 package pl.pz.elixirexpress.dto;
 
-import jakarta.xml.bind.annotation.*;
+import jakarta.xml.bind.annotation.XmlAccessType;
+import jakarta.xml.bind.annotation.XmlAccessorType;
+import jakarta.xml.bind.annotation.XmlRootElement;
+import jakarta.xml.bind.annotation.XmlType;
 
 @XmlRootElement(name = "Payment")
 @XmlAccessorType(XmlAccessType.FIELD)
@@ -21,7 +24,8 @@ public class ExpressPaymentDto {
     private String receiverAccount;
     private String title;
 
-    public ExpressPaymentDto() {}
+    public ExpressPaymentDto() {
+    }
 
     public String getPaymentId() {
         return paymentId;
