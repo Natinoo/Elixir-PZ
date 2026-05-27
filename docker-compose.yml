@@ -3,14 +3,14 @@ services:
     image: apache/kafka:4.0.0
     container_name: kafka
     ports:
-      - "29092:29092"
+      - "9092:9092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
@@ -24,6 +24,8 @@ services:
       interval: 10s
       timeout: 10s
       retries: 12
+    volumes:
+      - ./kafka_data:/tmp/kraft-combined-logs
 
   kafka-init:
     image: apache/kafka:4.0.0
@@ -37,6 +39,9 @@ services:
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic payments.elixir --partitions 1 --replication-factor 1 &&
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic payments.elixir-express --partitions 1 --replication-factor 1 &&
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic payments.sorbnet --partitions 3 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic payments.express.sorbnet --partitions 1 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic responses.elixir --partitions 1 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic responses.elixir-express --partitions 1 --replication-factor 1 &&
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic payments.sorbnet.settlement --partitions 1 --replication-factor 1 &&
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic notifications.banks --partitions 3 --replication-factor 1 &&
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic events.gridlock --partitions 1 --replication-factor 1 &&
@@ -129,7 +134,7 @@ services:
       - ./sorbnet-operator-ui:/app
       - sorbnet_operator_node_modules:/app/node_modules
     command: npm run dev -- --host 0.0.0.0 --port 5174
-        
+
 volumes:
   yugabyte_data:
   sorbnet_banks_node_modules:

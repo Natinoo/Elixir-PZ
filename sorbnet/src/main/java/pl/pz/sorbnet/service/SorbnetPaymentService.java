@@ -51,7 +51,7 @@ public class SorbnetPaymentService {
         return Map.of(
             "paymentId", existing.getPaymentId(),
             "status", existing.getStatus().toString(),
-            "info", "Przelew już przetworzony (idempotent)"
+            "message", "Przelew już przetworzony (idempotent)"
         );
         }
         BankAccount sender = accountRepo.findById(dto.getSenderBankId())
@@ -92,7 +92,6 @@ public class SorbnetPaymentService {
             "title", payment.getTitle(),
             "settledAt", payment.getSettledAt().toString()
         ));
-
 
         String xml = toXml(dto);
         kafka.send("notifications.banks", payment.getReceiverBankId(), xml);

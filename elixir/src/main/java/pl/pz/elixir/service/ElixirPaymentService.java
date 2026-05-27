@@ -106,11 +106,11 @@ public class ElixirPaymentService {
         }
 
         if (paymentDto.getSenderAccount().equals(paymentDto.getReceiverAccount())) {
-            throw new IllegalArgumentException("Bank nadawcy i odbiorcy nie mogą być takie same.");
+        throw new IllegalArgumentException("Bank nadawcy i odbiorcy nie mogą być takie same.");
         }
 
         if (paymentDto.getAmount() == null || paymentDto.getAmount() <= 0) {
-            throw new IllegalArgumentException("Kwota musi być większa od zera.");
+        throw new IllegalArgumentException("Kwota musi być większa od zera.");
         }
 
         if (isBlank(paymentDto.getCurrency())) {

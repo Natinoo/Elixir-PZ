@@ -4,7 +4,7 @@ import jakarta.xml.bind.annotation.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
-import jakarta.xml.bind.annotation.*;
+
 
 @XmlRootElement(name = "Payment")
 @XmlAccessorType(XmlAccessType.FIELD)
