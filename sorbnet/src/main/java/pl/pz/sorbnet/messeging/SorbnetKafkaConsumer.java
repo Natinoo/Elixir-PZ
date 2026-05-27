@@ -1,5 +1,6 @@
 package pl.pz.sorbnet.messeging;
 
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.Unmarshaller;
@@ -9,25 +10,31 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
+import pl.pz.sorbnet.dto.PaymentResponseDto;
 import pl.pz.sorbnet.dto.SorbnetPaymentDto;
 import pl.pz.sorbnet.service.SorbnetPaymentService;
 
+import javax.xml.transform.stream.StreamSource;
 import java.io.StringReader;
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @Component
 public class SorbnetKafkaConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(SorbnetKafkaConsumer.class);
+    
 
     private final Unmarshaller unmarshaller;
     private final SorbnetPaymentService paymentService;
     private final SimpMessagingTemplate ws;
     private final IntegrationResponseProducer responseProducer;
+    private final XmlMapper xmlMapper = new XmlMapper();
 
     public SorbnetKafkaConsumer(SorbnetPaymentService paymentService,
                                 SimpMessagingTemplate ws,
-                                IntegrationResponseProducer responseProducer) throws JAXBException {
+                                IntegrationResponseProducer responseProducer
+                                ) throws JAXBException {
         this.paymentService = paymentService;
         this.ws = ws;
         this.responseProducer = responseProducer;
@@ -48,29 +55,34 @@ public class SorbnetKafkaConsumer {
         log.info("[PAYMENT][{}] key={} payload={}", source, record.key(), record.value());
 
         try {
-            JAXBContext context = JAXBContext.newInstance(SorbnetPaymentDto.class);
-                Unmarshaller u = context.createUnmarshaller();
-                SorbnetPaymentDto dto = u.unmarshal(
-                        new javax.xml.transform.stream.StreamSource(new StringReader(record.value())),
-                        SorbnetPaymentDto.class
-                ).getValue();
+            SorbnetPaymentDto dto = unmarshaller.unmarshal(
+                    new StreamSource(new StringReader(record.value())),
+                    SorbnetPaymentDto.class
+            ).getValue();
 
             Map<String, Object> result = paymentService.process(dto);
-
             ws.convertAndSend("/topic/payments", result);
 
             String paymentId = String.valueOf(result.getOrDefault("paymentId", record.key()));
             String status = String.valueOf(result.getOrDefault("status", "UNKNOWN"));
             String message = String.valueOf(result.getOrDefault("message", "Payment processed"));
 
-            String response = "{\"paymentId\":\"" + esc(paymentId) +
-                    "\",\"status\":\"" + esc(status) +
-                    "\",\"message\":\"" + esc(message) + "\"}";
+            PaymentResponseDto responseDto = new PaymentResponseDto();
+            responseDto.setPaymentId(paymentId);
+            responseDto.setStatus(status);
+            responseDto.setMessage(message);
+            responseDto.setSenderBankId(dto.getSenderAccount());
+            responseDto.setReceiverBankId(dto.getReceiverAccount());
+            responseDto.setAmount(dto.getAmount());
+            responseDto.setSettledAt(LocalDateTime.now().toString());
+
+            String responseXml = xmlMapper.writeValueAsString(responseDto);
+            log.info("[PAYMENT][{}] response payload={}", source, responseXml);
 
             if ("ELIXIR_EXPRESS".equals(source)) {
-                responseProducer.sendToExpress(paymentId, response);
+                responseProducer.sendToExpress(paymentId, responseXml);
             } else {
-                responseProducer.sendToElixir(paymentId, response);
+                responseProducer.sendToElixir(paymentId, responseXml);
             }
 
             log.info("[PAYMENT][{}] response sent paymentId={} status={}", source, paymentId, status);
@@ -85,18 +97,24 @@ public class SorbnetKafkaConsumer {
     }
 
     private void sendError(String source, String paymentId, String message) {
-        String response = "{\"paymentId\":\"" + esc(paymentId) +
-                "\",\"status\":\"ERROR\",\"message\":\"" + esc(message) + "\"}";
+        try {
+            PaymentResponseDto responseDto = new PaymentResponseDto();
+            responseDto.setPaymentId(paymentId);
+            responseDto.setStatus("REJECTED");
+            responseDto.setMessage(message);
+            responseDto.setSettledAt(LocalDateTime.now().toString());
 
-        if ("ELIXIR_EXPRESS".equals(source)) {
-            responseProducer.sendToExpress(paymentId, response);
-        } else {
-            responseProducer.sendToElixir(paymentId, response);
+            String responseXml = xmlMapper.writeValueAsString(responseDto);
+            log.info("[PAYMENT][{}] error response payload={}", source, responseXml);
+
+            if ("ELIXIR_EXPRESS".equals(source)) {
+                responseProducer.sendToExpress(paymentId, responseXml);
+            } else {
+                responseProducer.sendToElixir(paymentId, responseXml);
+            }
+        } catch (Exception e) {
+            log.error("Cannot send XML error response for paymentId={}", paymentId, e);
         }
-    }
-
-    private String esc(String value) {
-        return value == null ? "" : value.replace("\"", "\\\"");
     }
 
     @KafkaListener(topics = "notifications.banks", groupId = "sorbnet-group")
