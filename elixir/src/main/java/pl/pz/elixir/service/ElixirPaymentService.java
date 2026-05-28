@@ -2,6 +2,8 @@ package pl.pz.elixir.service;
 
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.Marshaller;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import pl.pz.elixir.dto.ElixirPaymentDto;
@@ -11,15 +13,14 @@ import pl.pz.elixir.repository.PaymentRepository;
 
 import java.io.StringWriter;
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class ElixirPaymentService {
 
+    private static final Logger log = LoggerFactory.getLogger(ElixirPaymentService.class);
     private static final Set<String> ALLOWED_BANKS = Set.of("BANK_A", "BANK_B", "BANK_C");
     private static final Set<String> ALLOWED_CURRENCIES = Set.of("PLN");
 
@@ -34,13 +35,19 @@ public class ElixirPaymentService {
         this.kafkaTemplate = kafkaTemplate;
         this.paymentRepository = paymentRepository;
         this.jaxbContext = JAXBContext.newInstance(ElixirPaymentDto.class);
+        log.info("ElixirPaymentService initialized");
     }
 
-    public Map<String, Object> processPayment(ElixirPaymentDto paymentDto) {
+    public String processPayment(ElixirPaymentDto paymentDto) {
+        log.info("processPayment called: sender={}, receiver={}, amount={}",
+            paymentDto.getSenderAccount(), paymentDto.getReceiverAccount(), paymentDto.getAmount());
+
         validatePayment(paymentDto);
+        log.info("Validation passed");
 
         if (paymentDto.getPaymentId() == null || paymentDto.getPaymentId().isBlank()) {
             paymentDto.setPaymentId(UUID.randomUUID().toString());
+            log.info("Generated new paymentId: {}", paymentDto.getPaymentId());
         }
 
         Payment payment = new Payment(
@@ -53,18 +60,21 @@ public class ElixirPaymentService {
                 PaymentStatus.QUEUED,
                 LocalDateTime.now()
         );
-
         paymentRepository.save(payment);
+        log.info("Payment saved to DB, id={}", payment.getPaymentId());
 
         String payload = toXml(paymentDto);
-
         kafkaTemplate.send("payments.elixir", paymentDto.getPaymentId(), payload);
+        log.info("Message sent to Kafka topic 'payments.elixir'");
 
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("paymentId", paymentDto.getPaymentId());
-        response.put("status", "QUEUED_FOR_SESSION");
-
-        return response;
+        // Ręcznie zbudowana odpowiedź XML (bez tworzenia nowej klasy DTO)
+        String responseXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                "<PaymentResponse>" +
+                "<paymentId>" + paymentDto.getPaymentId() + "</paymentId>" +
+                "<status>QUEUED_FOR_SESSION</status>" +
+                "</PaymentResponse>";
+        log.info("Returning response XML: {}", responseXml);
+        return responseXml;
     }
 
     public List<Payment> getAllPayments() {
@@ -76,62 +86,28 @@ public class ElixirPaymentService {
     }
 
     public void updatePaymentStatus(String paymentId, PaymentStatus status) {
+        log.info("Updating payment {} to status {}", paymentId, status);
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new RuntimeException("Payment not found: " + paymentId));
-
         payment.setStatus(status);
         paymentRepository.save(payment);
     }
 
     private void validatePayment(ElixirPaymentDto paymentDto) {
-        if (paymentDto == null) {
-            throw new IllegalArgumentException("Brak danych przelewu.");
-        }
-
-        if (isBlank(paymentDto.getSenderAccount())) {
-            throw new IllegalArgumentException("Bank nadawcy jest wymagany.");
-        }
-
-        if (isBlank(paymentDto.getReceiverAccount())) {
-            throw new IllegalArgumentException("Bank odbiorcy jest wymagany.");
-        }
-
-        if (!ALLOWED_BANKS.contains(paymentDto.getSenderAccount())) {
-            throw new IllegalArgumentException("Nieprawidłowy bank nadawcy.");
-        }
-
-        if (!ALLOWED_BANKS.contains(paymentDto.getReceiverAccount())) {
-            throw new IllegalArgumentException("Nieprawidłowy bank odbiorcy.");
-        }
-
-        if (paymentDto.getSenderAccount().equals(paymentDto.getReceiverAccount())) {
-            throw new IllegalArgumentException("Bank nadawcy i odbiorcy nie mogą być takie same.");
-        }
-
-        if (paymentDto.getAmount() == null || paymentDto.getAmount() <= 0) {
-            throw new IllegalArgumentException("Kwota musi być większa od zera.");
-        }
-
-        if (isBlank(paymentDto.getCurrency())) {
-            throw new IllegalArgumentException("Waluta jest wymagana.");
-        }
-
-        if (!ALLOWED_CURRENCIES.contains(paymentDto.getCurrency())) {
-            throw new IllegalArgumentException("Nieobsługiwana waluta.");
-        }
-
-        if (isBlank(paymentDto.getTitle())) {
-            throw new IllegalArgumentException("Tytuł przelewu jest wymagany.");
-        }
-
-        if (paymentDto.getTitle().length() > 140) {
-            throw new IllegalArgumentException("Tytuł przelewu jest za długi.");
-        }
+        if (paymentDto == null) throw new IllegalArgumentException("Brak danych przelewu.");
+        if (isBlank(paymentDto.getSenderAccount())) throw new IllegalArgumentException("Bank nadawcy jest wymagany.");
+        if (isBlank(paymentDto.getReceiverAccount())) throw new IllegalArgumentException("Bank odbiorcy jest wymagany.");
+        if (!ALLOWED_BANKS.contains(paymentDto.getSenderAccount())) throw new IllegalArgumentException("Nieprawidłowy bank nadawcy.");
+        if (!ALLOWED_BANKS.contains(paymentDto.getReceiverAccount())) throw new IllegalArgumentException("Nieprawidłowy bank odbiorcy.");
+        if (paymentDto.getSenderAccount().equals(paymentDto.getReceiverAccount())) throw new IllegalArgumentException("Bank nadawcy i odbiorcy nie mogą być takie same.");
+        if (paymentDto.getAmount() == null || paymentDto.getAmount() <= 0) throw new IllegalArgumentException("Kwota musi być większa od zera.");
+        if (isBlank(paymentDto.getCurrency())) throw new IllegalArgumentException("Waluta jest wymagana.");
+        if (!ALLOWED_CURRENCIES.contains(paymentDto.getCurrency())) throw new IllegalArgumentException("Nieobsługiwana waluta.");
+        if (isBlank(paymentDto.getTitle())) throw new IllegalArgumentException("Tytuł przelewu jest wymagany.");
+        if (paymentDto.getTitle().length() > 140) throw new IllegalArgumentException("Tytuł przelewu jest za długi.");
     }
 
-    private boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
+    private boolean isBlank(String value) { return value == null || value.isBlank(); }
 
     private String toXml(ElixirPaymentDto paymentDto) {
         try {
@@ -142,6 +118,7 @@ public class ElixirPaymentService {
             marshaller.marshal(paymentDto, sw);
             return sw.toString();
         } catch (Exception e) {
+            log.error("Cannot serialize payment to XML", e);
             throw new RuntimeException("Cannot serialize payment to XML", e);
         }
     }
