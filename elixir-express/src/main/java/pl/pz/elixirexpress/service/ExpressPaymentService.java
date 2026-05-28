@@ -22,15 +22,13 @@ public class ExpressPaymentService {
     private static final Logger log = LoggerFactory.getLogger(ExpressPaymentService.class);
 
     private final KafkaTemplate<String, String> kafkaTemplate;
-    private final XmlMapper xmlMapper;
+    private final XmlMapper xmlMapper = new XmlMapper();
     private final PaymentRepository paymentRepository;
     private volatile boolean gridlockActive = false;
 
     public ExpressPaymentService(KafkaTemplate<String, String> kafkaTemplate,
-                                 XmlMapper xmlMapper,
                                  PaymentRepository paymentRepository) {
         this.kafkaTemplate = kafkaTemplate;
-        this.xmlMapper = xmlMapper;
         this.paymentRepository = paymentRepository;
     }
 

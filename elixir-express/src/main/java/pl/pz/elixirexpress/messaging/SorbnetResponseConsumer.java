@@ -1,4 +1,4 @@
-package pl.pz.elixirexpress;
+package pl.pz.elixirexpress.messaging;
 
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
