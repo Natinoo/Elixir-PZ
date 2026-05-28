@@ -1,11 +1,9 @@
 package pl.pz.elixir.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-
 import jakarta.xml.bind.JAXBContext;
+import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.Marshaller;
-
+import jakarta.xml.bind.Unmarshaller;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,13 +13,11 @@ import org.springframework.stereotype.Service;
 import pl.pz.elixir.dto.ElixirPaymentDto;
 import pl.pz.elixir.model.PaymentStatus;
 
+import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @Service
 public class SessionService {
@@ -32,11 +28,11 @@ public class SessionService {
     private boolean testModeEnabled;
 
     private final NettingService nettingService;
-    private final XmlMapper xmlMapper;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final SessionReportService sessionReportService;
     private final BankLiquidityService bankLiquidityService;
     private final ElixirPaymentService elixirPaymentService;
+    private final JAXBContext jaxbContext;
 
     public SessionService(
             NettingService nettingService,
@@ -44,13 +40,13 @@ public class SessionService {
             SessionReportService sessionReportService,
             BankLiquidityService bankLiquidityService,
             ElixirPaymentService elixirPaymentService
-    ) {
+    ) throws JAXBException {
         this.nettingService = nettingService;
         this.kafkaTemplate = kafkaTemplate;
         this.sessionReportService = sessionReportService;
         this.bankLiquidityService = bankLiquidityService;
         this.elixirPaymentService = elixirPaymentService;
-        this.xmlMapper = new XmlMapper();
+        this.jaxbContext = JAXBContext.newInstance(ElixirPaymentDto.class);
     }
 
     public List<ElixirPaymentDto> getCurrentSession() {
@@ -62,7 +58,8 @@ public class SessionService {
         log.info("Incoming XML: {}", xml);
 
         try {
-            ElixirPaymentDto payment = xmlMapper.readValue(xml, ElixirPaymentDto.class);
+            Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
+            ElixirPaymentDto payment = (ElixirPaymentDto) unmarshaller.unmarshal(new StringReader(xml));
             log.info("Parsed paymentId: {}", payment.getPaymentId());
 
             String sender = payment.getSenderAccount();
@@ -169,8 +166,13 @@ public class SessionService {
 
     private String toXml(ElixirPaymentDto paymentDto) {
         try {
-            return xmlMapper.writeValueAsString(paymentDto);
-        } catch (JsonProcessingException e) {
+            Marshaller marshaller = jaxbContext.createMarshaller();
+            marshaller.setProperty(Marshaller.JAXB_FRAGMENT, Boolean.TRUE);
+            marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);
+            StringWriter sw = new StringWriter();
+            marshaller.marshal(paymentDto, sw);
+            return sw.toString();
+        } catch (JAXBException e) {
             log.error("Cannot serialize settlement to XML", e);
             throw new RuntimeException("Cannot serialize settlement to XML", e);
         }

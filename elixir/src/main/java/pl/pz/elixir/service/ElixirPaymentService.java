@@ -1,7 +1,7 @@
 package pl.pz.elixir.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import jakarta.xml.bind.JAXBContext;
+import jakarta.xml.bind.Marshaller;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import pl.pz.elixir.dto.ElixirPaymentDto;
@@ -9,6 +9,7 @@ import pl.pz.elixir.model.Payment;
 import pl.pz.elixir.model.PaymentStatus;
 import pl.pz.elixir.repository.PaymentRepository;
 
+import java.io.StringWriter;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,17 +24,16 @@ public class ElixirPaymentService {
     private static final Set<String> ALLOWED_CURRENCIES = Set.of("PLN");
 
     private final KafkaTemplate<String, String> kafkaTemplate;
-    private final XmlMapper xmlMapper;
     private final PaymentRepository paymentRepository;
+    private final JAXBContext jaxbContext;
 
     public ElixirPaymentService(
             KafkaTemplate<String, String> kafkaTemplate,
-            XmlMapper xmlMapper,
             PaymentRepository paymentRepository
-    ) {
+    ) throws Exception {
         this.kafkaTemplate = kafkaTemplate;
-        this.xmlMapper = xmlMapper;
         this.paymentRepository = paymentRepository;
+        this.jaxbContext = JAXBContext.newInstance(ElixirPaymentDto.class);
     }
 
     public Map<String, Object> processPayment(ElixirPaymentDto paymentDto) {
@@ -105,11 +105,11 @@ public class ElixirPaymentService {
         }
 
         if (paymentDto.getSenderAccount().equals(paymentDto.getReceiverAccount())) {
-        throw new IllegalArgumentException("Bank nadawcy i odbiorcy nie mogą być takie same.");
+            throw new IllegalArgumentException("Bank nadawcy i odbiorcy nie mogą być takie same.");
         }
 
         if (paymentDto.getAmount() == null || paymentDto.getAmount() <= 0) {
-        throw new IllegalArgumentException("Kwota musi być większa od zera.");
+            throw new IllegalArgumentException("Kwota musi być większa od zera.");
         }
 
         if (isBlank(paymentDto.getCurrency())) {
@@ -135,8 +135,13 @@ public class ElixirPaymentService {
 
     private String toXml(ElixirPaymentDto paymentDto) {
         try {
-            return xmlMapper.writeValueAsString(paymentDto);
-        } catch (JsonProcessingException e) {
+            Marshaller marshaller = jaxbContext.createMarshaller();
+            marshaller.setProperty(Marshaller.JAXB_FRAGMENT, Boolean.TRUE);
+            marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);
+            StringWriter sw = new StringWriter();
+            marshaller.marshal(paymentDto, sw);
+            return sw.toString();
+        } catch (Exception e) {
             throw new RuntimeException("Cannot serialize payment to XML", e);
         }
     }

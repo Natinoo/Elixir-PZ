@@ -53,10 +53,10 @@
             <artifactId>jaxb-runtime</artifactId>
         </dependency>
 
-        <dependency>
+        <!-- <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-xml</artifactId>
-        </dependency>
+        </dependency> -->
 
         <dependency>
             <groupId>org.springdoc</groupId>
