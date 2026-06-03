@@ -33,14 +33,19 @@ public class ExpressPaymentService {
     }
 
     public Map<String, Object> processPayment(ExpressPaymentDto paymentDto) {
+        log.info("Processing payment: sender={}, receiver={}, amount={}",
+            paymentDto.getSenderAccount(), paymentDto.getReceiverAccount(), paymentDto.getAmount());
+
         validate(paymentDto);
 
         if (gridlockActive) {
+            log.warn("Payment rejected due to gridlock/emergency");
             throw new IllegalArgumentException("System temporarily unavailable due to gridlock. Try again later.");
         }
 
         if (paymentDto.getPaymentId() == null || paymentDto.getPaymentId().isBlank()) {
             paymentDto.setPaymentId(UUID.randomUUID().toString());
+            log.info("Generated new paymentId: {}", paymentDto.getPaymentId());
         }
 
         Payment payment = new Payment(
@@ -53,9 +58,11 @@ public class ExpressPaymentService {
         payment.setPaymentId(paymentDto.getPaymentId());
         payment.setStatus(PaymentStatus.QUEUED);
         paymentRepository.save(payment);
+        log.info("Payment saved to DB: {}", paymentDto.getPaymentId());
 
         String payload = toXml(paymentDto);
-        kafkaTemplate.send("payments.sorbnet", paymentDto.getPaymentId(), payload);
+        kafkaTemplate.send("payments.express.sorbnet", paymentDto.getPaymentId(), payload);
+        log.info("Payment sent to Kafka topic 'payments.express.sorbnet'");
 
         return Map.of(
                 "paymentId", paymentDto.getPaymentId(),
@@ -83,6 +90,7 @@ public class ExpressPaymentService {
         }
         payment.setStatus(PaymentStatus.REJECTED);
         paymentRepository.save(payment);
+        log.info("Payment cancelled: {}", paymentId);
         return true;
     }
 
@@ -94,19 +102,16 @@ public class ExpressPaymentService {
         });
     }
 
-    // Obsługa gridlock – nasłuch na topic events.gridlock
     @KafkaListener(topics = "events.gridlock", groupId = "elixir-express-group")
     public void handleGridlock(String message) {
-        log.warn("Gridlock event received: {}. Blocking new payments.", message);
+        log.warn("GRIDLOCK event received: {}. Blocking new payments.", message);
         gridlockActive = true;
-        // W rzeczywistym systemie można uruchomić timer do automatycznego odblokowania
     }
 
     @KafkaListener(topics = "events.emergency", groupId = "elixir-express-group")
     public void handleEmergency(String message) {
         log.warn("EMERGENCY event received: {}. System in emergency mode – blocking new payments for 5 minutes.", message);
         gridlockActive = true;
-        // Automatyczne odblokowanie po 5 minutach
         new Thread(() -> {
             try {
                 Thread.sleep(300000);

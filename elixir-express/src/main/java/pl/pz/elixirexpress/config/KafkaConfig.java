@@ -19,7 +19,7 @@ public class KafkaConfig {
     @Bean
     public NewTopic expressToSorbnetTopic() {
         return TopicBuilder.name("payments.express.sorbnet")
-                .partitions(1)
+                .partitions(3)
                 .replicas(1)
                 .build();
     }
@@ -27,6 +27,22 @@ public class KafkaConfig {
     @Bean
     public NewTopic expressResponsesTopic() {
         return TopicBuilder.name("responses.elixir-express")
+                .partitions(1)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic gridlockTopic() {
+        return TopicBuilder.name("events.gridlock")
+                .partitions(1)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic emergencyTopic() {
+        return TopicBuilder.name("events.emergency")
                 .partitions(1)
                 .replicas(1)
                 .build();

@@ -16,10 +16,23 @@ public class Payment {
     private Double amount;
     private String currency;
     private String title;
-
+    
+    @Column(name = "sender_bank_id")
+    private String senderBankId;
+    
+    @Column(name = "receiver_bank_id")
+    private String receiverBankId;
+    
+    @Column(name = "settled_at")
+    private LocalDateTime settledAt;
+    
+    @Column(name = "block_reason")
+    private String blockReason;
+    
     @Enumerated(EnumType.STRING)
     private PaymentStatus status;
 
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     public Payment() {
@@ -36,67 +49,40 @@ public class Payment {
         this.title = title;
     }
 
-    public String getPaymentId() {
-        return paymentId;
-    }
+    // Gettery i settery
+    public String getPaymentId() { return paymentId; }
+    public void setPaymentId(String paymentId) { this.paymentId = paymentId; }
 
-    public void setPaymentId(String paymentId) {
-        this.paymentId = paymentId;
-    }
+    public String getSenderAccount() { return senderAccount; }
+    public void setSenderAccount(String senderAccount) { this.senderAccount = senderAccount; }
 
-    public String getSenderAccount() {
-        return senderAccount;
-    }
+    public String getReceiverAccount() { return receiverAccount; }
+    public void setReceiverAccount(String receiverAccount) { this.receiverAccount = receiverAccount; }
 
-    public void setSenderAccount(String senderAccount) {
-        this.senderAccount = senderAccount;
-    }
+    public Double getAmount() { return amount; }
+    public void setAmount(Double amount) { this.amount = amount; }
 
-    public String getReceiverAccount() {
-        return receiverAccount;
-    }
+    public String getCurrency() { return currency; }
+    public void setCurrency(String currency) { this.currency = currency; }
 
-    public void setReceiverAccount(String receiverAccount) {
-        this.receiverAccount = receiverAccount;
-    }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
 
-    public Double getAmount() {
-        return amount;
-    }
+    public String getSenderBankId() { return senderBankId; }
+    public void setSenderBankId(String senderBankId) { this.senderBankId = senderBankId; }
 
-    public void setAmount(Double amount) {
-        this.amount = amount;
-    }
+    public String getReceiverBankId() { return receiverBankId; }
+    public void setReceiverBankId(String receiverBankId) { this.receiverBankId = receiverBankId; }
 
-    public String getCurrency() {
-        return currency;
-    }
+    public LocalDateTime getSettledAt() { return settledAt; }
+    public void setSettledAt(LocalDateTime settledAt) { this.settledAt = settledAt; }
 
-    public void setCurrency(String currency) {
-        this.currency = currency;
-    }
+    public String getBlockReason() { return blockReason; }
+    public void setBlockReason(String blockReason) { this.blockReason = blockReason; }
 
-    public String getTitle() {
-        return title;
-    }
+    public PaymentStatus getStatus() { return status; }
+    public void setStatus(PaymentStatus status) { this.status = status; }
 
-    public void setTitle(String title) {
-        this.title = title;
-    }
-
-    public PaymentStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(PaymentStatus status) {
-        this.status = status;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

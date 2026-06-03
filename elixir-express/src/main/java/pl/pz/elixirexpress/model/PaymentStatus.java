@@ -4,5 +4,7 @@ public enum PaymentStatus {
     QUEUED,
     PROCESSED,
     BLOCKED,
-    REJECTED
+    REJECTED,
+    GRIDLOCK_HELD,
+    SETTLED  
 }

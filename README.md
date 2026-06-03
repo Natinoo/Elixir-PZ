@@ -121,6 +121,9 @@ Po uruchomieniu kontenera dokumentacje API dostępne są przez Swagger pod adres
   **Elixir**
   - GUI pracownika i operatora banku
     http://localhost:8081/
+  ##Elixir-express**
+  - GUI pracownika i operatora banku
+    http://localhost:8082/
 - **Sorbnet**
   - GUI pracownika banku  
     http://localhost:5173/
