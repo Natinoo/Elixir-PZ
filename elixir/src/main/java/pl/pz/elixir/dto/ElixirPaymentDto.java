@@ -14,6 +14,8 @@ import jakarta.validation.constraints.Positive;
         "paymentId",
         "amount",
         "currency",
+        "senderBankId",
+        "receiverBankId",
         "senderAccount",
         "receiverAccount",
         "title"
@@ -30,9 +32,15 @@ public class ElixirPaymentDto {
     private String currency;
 
     @NotBlank(message = "Bank nadawcy jest wymagany")
-    private String senderAccount;
+    private String senderBankId;
 
     @NotBlank(message = "Bank odbiorcy jest wymagany")
+    private String receiverBankId;
+
+    @NotBlank(message = "Rachunek nadawcy jest wymagany")
+    private String senderAccount;
+
+    @NotBlank(message = "Rachunek odbiorcy jest wymagany")
     private String receiverAccount;
 
     @NotBlank(message = "Tytuł jest wymagany")
@@ -41,15 +49,17 @@ public class ElixirPaymentDto {
     public ElixirPaymentDto() {
     }
 
-    public ElixirPaymentDto(String paymentId, Double amount, String currency, String senderAccount,
-                            String receiverAccount, String title) {
-        this.paymentId = paymentId;
-        this.amount = amount;
-        this.currency = currency;
-        this.senderAccount = senderAccount;
-        this.receiverAccount = receiverAccount;
-        this.title = title;
-    }
+    public ElixirPaymentDto(String paymentId, Double amount, String currency, String senderBankId,
+                        String receiverBankId, String senderAccount, String receiverAccount, String title) {
+    this.paymentId = paymentId;
+    this.amount = amount;
+    this.currency = currency;
+    this.senderBankId = senderBankId;
+    this.receiverBankId = receiverBankId;
+    this.senderAccount = senderAccount;
+    this.receiverAccount = receiverAccount;
+    this.title = title;
+}
 
     public String getPaymentId() {
         return paymentId;
@@ -98,4 +108,19 @@ public class ElixirPaymentDto {
     public void setTitle(String title) {
         this.title = title;
     }
+    public String getSenderBankId() {
+    return senderBankId;
+    }
+
+    public void setSenderBankId(String senderBankId) {
+        this.senderBankId = senderBankId;
+    }
+
+    public String getReceiverBankId() {
+        return receiverBankId;
+    }
+
+    public void setReceiverBankId(String receiverBankId) {
+        this.receiverBankId = receiverBankId;
+}
 }

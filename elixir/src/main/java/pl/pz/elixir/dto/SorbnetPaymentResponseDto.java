@@ -1,11 +1,25 @@
 package pl.pz.elixir.dto;
 
-import jakarta.xml.bind.annotation.XmlElement;
+import jakarta.xml.bind.annotation.XmlAccessType;
+import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlRootElement;
+import jakarta.xml.bind.annotation.XmlType;
 
 import java.math.BigDecimal;
 
 @XmlRootElement(name = "SorbnetPaymentResponse")
+@XmlAccessorType(XmlAccessType.FIELD)
+@XmlType(propOrder = {
+        "paymentId",
+        "status",
+        "message",
+        "senderBankId",
+        "receiverBankId",
+        "senderAccount",
+        "receiverAccount",
+        "amount",
+        "settledAt"
+})
 public class SorbnetPaymentResponseDto {
 
     private String paymentId;
@@ -13,13 +27,14 @@ public class SorbnetPaymentResponseDto {
     private String message;
     private String senderBankId;
     private String receiverBankId;
+    private String senderAccount;
+    private String receiverAccount;
     private BigDecimal amount;
     private String settledAt;
 
     public SorbnetPaymentResponseDto() {
     }
 
-    @XmlElement(name = "paymentId")
     public String getPaymentId() {
         return paymentId;
     }
@@ -28,7 +43,6 @@ public class SorbnetPaymentResponseDto {
         this.paymentId = paymentId;
     }
 
-    @XmlElement(name = "status")
     public String getStatus() {
         return status;
     }
@@ -37,7 +51,6 @@ public class SorbnetPaymentResponseDto {
         this.status = status;
     }
 
-    @XmlElement(name = "message")
     public String getMessage() {
         return message;
     }
@@ -46,7 +59,6 @@ public class SorbnetPaymentResponseDto {
         this.message = message;
     }
 
-    @XmlElement(name = "senderBankId")
     public String getSenderBankId() {
         return senderBankId;
     }
@@ -55,7 +67,6 @@ public class SorbnetPaymentResponseDto {
         this.senderBankId = senderBankId;
     }
 
-    @XmlElement(name = "receiverBankId")
     public String getReceiverBankId() {
         return receiverBankId;
     }
@@ -64,7 +75,22 @@ public class SorbnetPaymentResponseDto {
         this.receiverBankId = receiverBankId;
     }
 
-    @XmlElement(name = "amount")
+    public String getSenderAccount() {
+        return senderAccount;
+    }
+
+    public void setSenderAccount(String senderAccount) {
+        this.senderAccount = senderAccount;
+    }
+
+    public String getReceiverAccount() {
+        return receiverAccount;
+    }
+
+    public void setReceiverAccount(String receiverAccount) {
+        this.receiverAccount = receiverAccount;
+    }
+
     public BigDecimal getAmount() {
         return amount;
     }
@@ -73,7 +99,6 @@ public class SorbnetPaymentResponseDto {
         this.amount = amount;
     }
 
-    @XmlElement(name = "settledAt")
     public String getSettledAt() {
         return settledAt;
     }

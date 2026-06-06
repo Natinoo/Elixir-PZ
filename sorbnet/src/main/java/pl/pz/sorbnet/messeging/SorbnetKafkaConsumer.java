@@ -1,6 +1,9 @@
 package pl.pz.sorbnet.messeging;
 
-import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import jakarta.xml.bind.JAXBElement;
+import jakarta.xml.bind.Marshaller;
+import javax.xml.namespace.QName;
+import java.io.StringWriter;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.Unmarshaller;
@@ -29,7 +32,7 @@ public class SorbnetKafkaConsumer {
     private final SorbnetPaymentService paymentService;
     private final SimpMessagingTemplate ws;
     private final IntegrationResponseProducer responseProducer;
-    private final XmlMapper xmlMapper = new XmlMapper();
+
 
     public SorbnetKafkaConsumer(SorbnetPaymentService paymentService,
                                 SimpMessagingTemplate ws,
@@ -71,19 +74,15 @@ public class SorbnetKafkaConsumer {
             responseDto.setPaymentId(paymentId);
             responseDto.setStatus(status);
             responseDto.setMessage(message);
-            responseDto.setSenderBankId(dto.getSenderAccount());
-            responseDto.setReceiverBankId(dto.getReceiverAccount());
+            responseDto.setSenderBankId(dto.getSenderBankId());
+            responseDto.setReceiverBankId(dto.getReceiverBankId());
+            responseDto.setSenderAccount(dto.getSenderAccount());
+            responseDto.setReceiverAccount(dto.getReceiverAccount());
             responseDto.setAmount(dto.getAmount());
             responseDto.setSettledAt(LocalDateTime.now().toString());
 
-            String responseXml = xmlMapper.writeValueAsString(responseDto);
+            String responseXml = toResponseXml(responseDto);
             log.info("[PAYMENT][{}] response payload={}", source, responseXml);
-
-            if ("ELIXIR_EXPRESS".equals(source)) {
-                responseProducer.sendToExpress(paymentId, responseXml);
-            } else {
-                responseProducer.sendToElixir(paymentId, responseXml);
-            }
 
             log.info("[PAYMENT][{}] response sent paymentId={} status={}", source, paymentId, status);
 
@@ -96,6 +95,27 @@ public class SorbnetKafkaConsumer {
         }
     }
 
+    private String toResponseXml(PaymentResponseDto responseDto) {
+    try {
+        JAXBContext ctx = JAXBContext.newInstance(PaymentResponseDto.class);
+        Marshaller marshaller = ctx.createMarshaller();
+        marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);
+
+        StringWriter sw = new StringWriter();
+
+        JAXBElement<PaymentResponseDto> root = new JAXBElement<>(
+                new QName("SorbnetPaymentResponse"),
+                PaymentResponseDto.class,
+                responseDto
+        );
+
+        marshaller.marshal(root, sw);
+        return sw.toString();
+    } catch (Exception e) {
+        throw new RuntimeException("XML marshal error", e);
+    }
+}   
+
     private void sendError(String source, String paymentId, String message) {
         try {
             PaymentResponseDto responseDto = new PaymentResponseDto();
@@ -104,14 +124,10 @@ public class SorbnetKafkaConsumer {
             responseDto.setMessage(message);
             responseDto.setSettledAt(LocalDateTime.now().toString());
 
-            String responseXml = xmlMapper.writeValueAsString(responseDto);
+            String responseXml = toResponseXml(responseDto);
             log.info("[PAYMENT][{}] error response payload={}", source, responseXml);
 
-            if ("ELIXIR_EXPRESS".equals(source)) {
-                responseProducer.sendToExpress(paymentId, responseXml);
-            } else {
-                responseProducer.sendToElixir(paymentId, responseXml);
-            }
+
         } catch (Exception e) {
             log.error("Cannot send XML error response for paymentId={}", paymentId, e);
         }

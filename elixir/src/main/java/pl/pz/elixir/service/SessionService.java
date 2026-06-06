@@ -12,6 +12,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import pl.pz.elixir.dto.ElixirPaymentDto;
 import pl.pz.elixir.model.PaymentStatus;
+import pl.pz.elixir.model.SettlementBankAccount;
+import pl.pz.elixir.repository.SettlementBankAccountRepository;
 
 import java.io.StringReader;
 import java.io.StringWriter;
@@ -33,13 +35,15 @@ public class SessionService {
     private final BankLiquidityService bankLiquidityService;
     private final ElixirPaymentService elixirPaymentService;
     private final JAXBContext jaxbContext;
+    private final SettlementBankAccountRepository settlementBankAccountRepository;
 
     public SessionService(
             NettingService nettingService,
             KafkaTemplate<String, String> kafkaTemplate,
             SessionReportService sessionReportService,
             BankLiquidityService bankLiquidityService,
-            ElixirPaymentService elixirPaymentService
+            ElixirPaymentService elixirPaymentService,
+            SettlementBankAccountRepository settlementBankAccountRepository
     ) throws JAXBException {
         this.nettingService = nettingService;
         this.kafkaTemplate = kafkaTemplate;
@@ -47,6 +51,7 @@ public class SessionService {
         this.bankLiquidityService = bankLiquidityService;
         this.elixirPaymentService = elixirPaymentService;
         this.jaxbContext = JAXBContext.newInstance(ElixirPaymentDto.class);
+        this.settlementBankAccountRepository = settlementBankAccountRepository;
     }
 
     public List<ElixirPaymentDto> getCurrentSession() {
@@ -62,17 +67,18 @@ public class SessionService {
             ElixirPaymentDto payment = (ElixirPaymentDto) unmarshaller.unmarshal(new StringReader(xml));
             log.info("Parsed paymentId: {}", payment.getPaymentId());
 
-            String sender = payment.getSenderAccount();
+            String senderBankId = payment.getSenderBankId();
+            String receiverBankId = payment.getReceiverBankId();
 
-            if (bankLiquidityService.isBlocked(sender)) {
-                log.warn("BLOCKED BANK: {}", sender);
+            if (bankLiquidityService.isBlocked(senderBankId)) {
+                log.warn("BLOCKED BANK: {}", senderBankId);
                 elixirPaymentService.updatePaymentStatus(payment.getPaymentId(), PaymentStatus.BLOCKED);
                 return;
             }
 
             bankLiquidityService.applyTransaction(
-                    payment.getSenderAccount(),
-                    payment.getReceiverAccount(),
+                    senderBankId,
+                    receiverBankId,
                     payment.getAmount()
             );
 
@@ -108,6 +114,14 @@ public class SessionService {
         }
     }
 
+    private String resolveSettlementAccount(String bankId) {
+    return settlementBankAccountRepository.findByBankIdAndIsDefaultTrue(bankId)
+            .map(SettlementBankAccount::getAccountNumber)
+            .orElseThrow(() -> new IllegalArgumentException(
+                "Brak domyślnego rachunku rozliczeniowego dla banku: " + bankId
+            ));
+    }
+
     public synchronized void closeSession(String sessionName) {
         if (currentSession.isEmpty()) {
             log.info("=== {} SESSION EMPTY ===", sessionName);
@@ -120,43 +134,51 @@ public class SessionService {
         sessionReportService.saveReport(sessionName, nettingResult);
 
         log.info("=== NETTING RESULT ===");
+        log.info("Netting result size={}", nettingResult.size());
 
-        for (String line : nettingResult) {
-            log.info(line);
 
-            try {
-                String[] parts = line.split(" pays | = ");
-                String sender = parts[0].trim();
-                String receiver = parts[1].trim();
-                double amount = Double.parseDouble(parts[2].trim());
+        boolean allSentSuccessfully = true;
 
-                ElixirPaymentDto settlementDto = new ElixirPaymentDto();
-                settlementDto.setPaymentId(UUID.randomUUID().toString());
-                settlementDto.setAmount(amount);
-                settlementDto.setCurrency("PLN");
-                settlementDto.setSenderAccount(sender);
-                settlementDto.setReceiverAccount(receiver);
-                settlementDto.setTitle("Netting " + sessionName);
+for (String line : nettingResult) {
+    log.info(line);
 
-                String settlementXml = toXml(settlementDto);
+    try {
+        String[] parts = line.split(" pays | = ");
+        String sender = parts[0].trim();
+        String receiver = parts[1].trim();
+        double amount = Double.parseDouble(parts[2].trim());
 
-                kafkaTemplate.send(
-                        "payments.sorbnet",
-                        settlementDto.getPaymentId(),
-                        settlementXml
-                );
+        ElixirPaymentDto settlementDto = new ElixirPaymentDto();
+        settlementDto.setPaymentId(UUID.randomUUID().toString());
+        settlementDto.setAmount(amount);
+        settlementDto.setCurrency("PLN");
+        settlementDto.setSenderBankId(sender);
+        settlementDto.setReceiverBankId(receiver);
+        settlementDto.setSenderAccount(resolveSettlementAccount(sender));
+        settlementDto.setReceiverAccount(resolveSettlementAccount(receiver));
+        settlementDto.setTitle("Netting " + sessionName);
 
-                log.info("[ELIXIR->SORBNET] sent netting: {}", line);
+        String settlementXml = toXml(settlementDto);
+        log.info("Sending settlement XML to SORBNet: {}", settlementXml);
 
-            } catch (Exception e) {
-                log.error("[ELIXIR->SORBNET] parse error for line: {}", line, e);
-            }
+        kafkaTemplate.send(
+                "payments.sorbnet",
+                settlementDto.getPaymentId(),
+                settlementXml
+        );
+
+        log.info("[ELIXIR->SORBNET] sent netting: {}", line);
+
+        } catch (Exception e) {
+            allSentSuccessfully = false;
+            log.error("[ELIXIR->SORBNET] parse/send error for line: {}", line, e);
+        }
         }
 
         for (ElixirPaymentDto payment : currentSession) {
             elixirPaymentService.updatePaymentStatus(
                     payment.getPaymentId(),
-                    PaymentStatus.PROCESSED
+                    allSentSuccessfully ? PaymentStatus.PROCESSED : PaymentStatus.BLOCKED
             );
         }
 

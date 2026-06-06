@@ -19,7 +19,7 @@ public class BankAccount {
         description = "Unikalny identyfikator banku w systemie.",
         example = "PKO"
     )
-    private String bankId;
+    private String bankId;  
 
     @Schema(
         description = "Pełna nazwa banku uczestniczącego w systemie.",

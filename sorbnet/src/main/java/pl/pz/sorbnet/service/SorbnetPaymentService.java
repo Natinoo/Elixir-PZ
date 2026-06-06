@@ -1,19 +1,18 @@
 package pl.pz.sorbnet.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.xml.bind.JAXBContext;
-import jakarta.xml.bind.Marshaller;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import pl.pz.sorbnet.dto.SorbnetPaymentDto;
 import pl.pz.sorbnet.model.*;
 import pl.pz.sorbnet.repository.*;
+import pl.pz.sorbnet.messeging.IntegrationResponseProducer;
 
-import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -28,36 +27,55 @@ public class SorbnetPaymentService {
     private final PaymentRepository paymentRepo;
     private final KafkaTemplate<String, String> kafka;
     private final ObjectMapper mapper;
-
+    private final BankSettlementAccountRepository bankSettlementAccountRepository;
+    private final IntegrationResponseProducer integrationResponseProducer;
     private final SimpMessagingTemplate ws;
 
     public SorbnetPaymentService(BankAccountRepository accountRepo,
-                              PaymentRepository paymentRepo,
-                              KafkaTemplate<String, String> kafka,
-                              ObjectMapper mapper,
-                              SimpMessagingTemplate ws) {
+                             PaymentRepository paymentRepo,
+                             KafkaTemplate<String, String> kafka,
+                             IntegrationResponseProducer integrationResponseProducer,
+                             ObjectMapper mapper,
+                             SimpMessagingTemplate ws,
+                             BankSettlementAccountRepository bankSettlementAccountRepository) {
     this.accountRepo = accountRepo;
     this.paymentRepo = paymentRepo;
     this.kafka = kafka;
     this.mapper = mapper;
     this.ws = ws;
+    this.bankSettlementAccountRepository = bankSettlementAccountRepository;
+    this.integrationResponseProducer = integrationResponseProducer;
     }
 
     public Map<String, Object> process(SorbnetPaymentDto dto) {
         if (dto.getPaymentId() == null) dto.setPaymentId(UUID.randomUUID().toString());
 
         if (paymentRepo.existsById(dto.getPaymentId())) {
-        Payment existing = paymentRepo.findById(dto.getPaymentId()).get();
-        return Map.of(
-            "paymentId", existing.getPaymentId(),
-            "status", existing.getStatus().toString(),
-            "message", "Przelew już przetworzony (idempotent)"
-        );
+            Payment existing = paymentRepo.findById(dto.getPaymentId()).get();
+            return Map.of(
+                "paymentId", existing.getPaymentId(),
+                "status", existing.getStatus().toString(),
+                "message", "Przelew już przetworzony (idempotent)"
+            );
         }
         BankAccount sender = accountRepo.findById(dto.getSenderBankId())
                 .orElseThrow(() -> new RuntimeException("Nieznany bank: " + dto.getSenderBankId()));
         BankAccount receiver = accountRepo.findById(dto.getReceiverBankId())
                 .orElseThrow(() -> new RuntimeException("Nieznany bank: " + dto.getReceiverBankId()));
+        BankSettlementAccount senderSettlementAccount = bankSettlementAccountRepository
+        .findByAccountNumber(dto.getSenderAccount())
+        .orElseThrow(() -> new RuntimeException("Nieznany rachunek nadawcy: " + dto.getSenderAccount()));
+
+        BankSettlementAccount receiverSettlementAccount = bankSettlementAccountRepository
+        .findByAccountNumber(dto.getReceiverAccount())
+        .orElseThrow(() -> new RuntimeException("Nieznany rachunek odbiorcy: " + dto.getReceiverAccount()));
+
+        if (!senderSettlementAccount.getBankId().equals(dto.getSenderBankId())) {
+            return reject(dto, "SENDER_ACCOUNT_MISMATCH");
+        }
+        if (!receiverSettlementAccount.getBankId().equals(dto.getReceiverBankId())) {
+            return reject(dto, "RECEIVER_ACCOUNT_MISMATCH");
+        }
 
         if (sender.isBlocked())   return reject(dto, "SENDER_BLOCKED");
         if (receiver.isBlocked()) return reject(dto, "RECEIVER_BLOCKED");
@@ -93,15 +111,12 @@ public class SorbnetPaymentService {
             "settledAt", payment.getSettledAt().toString()
         ));
 
-        String xml = toXml(dto);
-        kafka.send("notifications.banks", payment.getReceiverBankId(), xml);
-        kafka.send("notifications.banks", payment.getSenderBankId(), xml);
-
         checkDebtAlert(sender);
 
         return Map.of(
             "paymentId", payment.getPaymentId(),
             "status", "SETTLED",
+            "message", "Payment processed",
             "settledAt", payment.getSettledAt().toString()
         );
     }
@@ -253,17 +268,6 @@ public class SorbnetPaymentService {
         return p;
     }
 
-    private String toXml(SorbnetPaymentDto dto) {
-        try {
-            JAXBContext ctx = JAXBContext.newInstance(SorbnetPaymentDto.class);
-            Marshaller m = ctx.createMarshaller();
-            StringWriter sw = new StringWriter();
-            m.marshal(dto, sw);
-            return sw.toString();
-        } catch (Exception e) {
-            throw new RuntimeException("XML marshal error", e);
-        }
-    }
 
     private void notify(String topic, String key, Map<String, Object> payload) {
         try { kafka.send(topic, key, mapper.writeValueAsString(payload)); }

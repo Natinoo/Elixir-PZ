@@ -72,6 +72,8 @@ public class SorbnetPaymentController {
                                 <message>Przelew został rozliczony</message>
                                 <senderBankId>PKO</senderBankId>
                                 <receiverBankId>PEKAO</receiverBankId>
+                                <senderAccount>11111100000000000000000001</senderAccount>
+                                <receiverAccount>22222200000000000000000002</receiverAccount>
                                 <amount>1250000.00</amount>
                                 <settledAt>2026-05-27T17:45:21</settledAt>
                             </SorbnetPaymentResponse>
@@ -99,6 +101,8 @@ public class SorbnetPaymentController {
                                 <message>Przelew został wstrzymany w kolejce gridlock</message>
                                 <senderBankId>PKO</senderBankId>
                                 <receiverBankId>PEKAO</receiverBankId>
+                                <senderAccount>11111100000000000000000001</senderAccount>
+                                <receiverAccount>22222200000000000000000002</receiverAccount>
                                 <amount>50000000.00</amount>
                             </SorbnetPaymentResponse>
                             """
@@ -137,8 +141,10 @@ public class SorbnetPaymentController {
                                 <paymentId>SORB-20260527-0001</paymentId>
                                 <amount>1250000.00</amount>
                                 <currency>PLN</currency>
-                                <senderAccount>PKO</senderAccount>
-                                <receiverAccount>PEKAO</receiverAccount>
+                                <senderBankId>PKO</senderBankId>
+                                <receiverBankId>PEKAO</receiverBankId>
+                                <senderAccount>12102010260000042270201111</senderAccount>
+                                <receiverAccount>47114020040000300201355387</receiverAccount>
                                 <title>Rozrachunek rynku międzybankowego</title>
                                 <status>NEW</status>
                             </SorbnetPaymentRequest>
@@ -177,6 +183,8 @@ public class SorbnetPaymentController {
                                 <message>Przelew został rozliczony</message>
                                 <senderBankId>PKO</senderBankId>
                                 <receiverBankId>PEKAO</receiverBankId>
+                                <senderAccount>11111100000000000000000001</senderAccount>
+                                <receiverAccount>22222200000000000000000002</receiverAccount>
                                 <amount>1250000.00</amount>
                                 <settledAt>2026-05-27T17:45:21</settledAt>
                             </payment>
@@ -257,6 +265,8 @@ public class SorbnetPaymentController {
                             <message>Przelew został rozliczony</message>
                             <senderBankId>PKO</senderBankId>
                             <receiverBankId>PEKAO</receiverBankId>
+                            <senderAccount>11111100000000000000000001</senderAccount>
+                            <receiverAccount>22222200000000000000000002</receiverAccount>
                             <amount>1250000.00</amount>
                             <settledAt>2026-05-27T17:45:21</settledAt>
                         </SorbnetPaymentResponse>
@@ -291,6 +301,8 @@ public class SorbnetPaymentController {
         response.setMessage((String) result.getOrDefault("message", result.getOrDefault("info", defaultMessage(String.valueOf(result.get("status"))))));
         response.setSenderBankId((String) result.getOrDefault("senderBankId", requestDto.getSenderBankId()));
         response.setReceiverBankId((String) result.getOrDefault("receiverBankId", requestDto.getReceiverBankId()));
+        response.setSenderAccount(requestDto.getSenderAccount());
+        response.setReceiverAccount(requestDto.getReceiverAccount());
 
         Object amount = result.get("amount");
         if (amount instanceof BigDecimal bd) {
@@ -313,6 +325,8 @@ public class SorbnetPaymentController {
         dto.setStatus(payment.getStatus() != null ? payment.getStatus().name() : null);
         dto.setMessage(resolvePaymentMessage(payment));
         dto.setSenderBankId(payment.getSenderBankId());
+        dto.setSenderAccount(payment.getSenderAccount());
+        dto.setReceiverAccount(payment.getReceiverAccount());
         dto.setReceiverBankId(payment.getReceiverBankId());
         dto.setAmount(payment.getAmount());
         dto.setSettledAt(payment.getSettledAt() != null ? payment.getSettledAt().toString() : null);
