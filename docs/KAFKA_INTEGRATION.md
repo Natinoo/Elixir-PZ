@@ -22,7 +22,7 @@ Dokument opisuje architekturę sterowaną zdarzeniami (Event-Driven) pomiędzy a
 
 Procesowanie w systemie SORBNet zachowuje ścisłą separację kanałów standardowych (`ELIXIR`) oraz przyspieszonych (`ELIXIR_EXPRESS`). 
 
-| 📥 Topik Wejściowy (Request) | ⚙️ Źródło Sorbnet (Source) | 📤 Topik Wyjściowy (Response/Error) |
+| Topik Wejściowy (Request) | Źródło Sorbnet (Source) | Topik Wyjściowy (Response/Error) |
 | :--- | :--- | :--- |
 | `payments.sorbnet` | `ELIXIR` | `responses.elixir` |
 | `payments.express.sorbnet` | `ELIXIR_EXPRESS` | `responses.elixir-express` |
