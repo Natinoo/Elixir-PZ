@@ -1,6 +1,7 @@
 package pl.pz.elixir.consumer;
 
 import jakarta.xml.bind.JAXBContext;
+import jakarta.xml.bind.JAXBElement;
 import jakarta.xml.bind.Unmarshaller;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,8 @@ import pl.pz.elixir.model.PaymentStatus;
 import pl.pz.elixir.service.ElixirPaymentService;
 
 import java.io.StringReader;
+
+import javax.xml.transform.stream.StreamSource;
 
 @Component
 public class SorbnetResponseConsumer {
@@ -29,7 +32,14 @@ public class SorbnetResponseConsumer {
     public void consume(String message) {
         try {
             Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
-            SorbnetPaymentResponseDto response = (SorbnetPaymentResponseDto) unmarshaller.unmarshal(new StringReader(message));
+
+            JAXBElement<SorbnetPaymentResponseDto> root =
+                    unmarshaller.unmarshal(
+                            new StreamSource(new StringReader(message)),
+                            SorbnetPaymentResponseDto.class
+                    );
+
+            SorbnetPaymentResponseDto response = root.getValue();
 
             PaymentStatus mappedStatus = mapStatus(response.getStatus());
 
@@ -39,15 +49,15 @@ public class SorbnetResponseConsumer {
             );
 
             log.info(
-                "SORBNet response processed: paymentId={}, sorbnetStatus={}, mappedStatus={}, senderBankId={}, receiverBankId={}, senderAccount={}, receiverAccount={}, settledAt={}",
-                response.getPaymentId(),
-                response.getStatus(),
-                mappedStatus,
-                response.getSenderBankId(),
-                response.getReceiverBankId(),
-                response.getSenderAccount(),
-                response.getReceiverAccount(),
-                response.getSettledAt()
+                    "SORBNet response processed: paymentId={}, sorbnetStatus={}, mappedStatus={}, senderBankId={}, receiverBankId={}, senderAccount={}, receiverAccount={}, settledAt={}",
+                    response.getPaymentId(),
+                    response.getStatus(),
+                    mappedStatus,
+                    response.getSenderBankId(),
+                    response.getReceiverBankId(),
+                    response.getSenderAccount(),
+                    response.getReceiverAccount(),
+                    response.getSettledAt()
             );
 
         } catch (Exception e) {

@@ -1,23 +1,29 @@
 package pl.pz.sorbnet.dto;
 
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.xml.bind.annotation.XmlAccessType;
+import jakarta.xml.bind.annotation.XmlAccessorType;
+import jakarta.xml.bind.annotation.XmlElement;
+import jakarta.xml.bind.annotation.XmlRootElement;
 
+import java.util.ArrayList;
 import java.util.List;
 
-@JacksonXmlRootElement(localName = "Payments")
+@XmlRootElement(name = "Payments")
+@XmlAccessorType(XmlAccessType.FIELD)
 @Schema(
-    name = "Payments",
-    description = "Lista płatności zwracana jako odpowiedź XML."
+        name = "Payments",
+        description = "Lista przelewów zwracana przez endpoint historii płatności."
 )
 public class PaymentListResponseDto {
 
-    @JacksonXmlElementWrapper(useWrapping = false)
-    @JacksonXmlProperty(localName = "payment")
-    @Schema(description = "Elementy listy płatności.")
-    private List<PaymentResponseDto> payments;
+    @XmlElement(name = "payment")
+    @ArraySchema(
+            arraySchema = @Schema(description = "Lista przelewów spełniających kryteria wyszukiwania."),
+            schema = @Schema(implementation = PaymentResponseDto.class)
+    )
+    private List<PaymentResponseDto> payments = new ArrayList<>();
 
     public PaymentListResponseDto() {
     }

@@ -19,13 +19,7 @@ public class BankAccount {
         description = "Unikalny identyfikator banku w systemie.",
         example = "PKO"
     )
-    private String bankId;
-
-    @Schema(
-    description = "Numer rachunku rozliczeniowego banku w systemie SORBNet.",
-    example = "10100100000000000000000000"
-    )
-    private String accountNumber;
+    private String bankId;  
 
     @Schema(
         description = "Pełna nazwa banku uczestniczącego w systemie.",
@@ -64,9 +58,6 @@ public class BankAccount {
         nullable = true
     )
     private LocalDateTime blockedAt;
-
-    public String getAccountNumber() { return accountNumber; }
-    public void setAccountNumber(String accountNumber) { this.accountNumber = accountNumber; }
 
     public BankAccount() {}
 

@@ -1,53 +1,60 @@
 package pl.pz.sorbnet.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.xml.bind.annotation.XmlAccessorType;
-import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlAccessType;
+import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlRootElement;
+import jakarta.xml.bind.annotation.XmlType;
 
 import java.math.BigDecimal;
 
 @XmlRootElement(name = "SorbnetPaymentRequest")
 @XmlAccessorType(XmlAccessType.FIELD)
-@Schema(name = "SorbnetPaymentRequest", description = "Komunikat XML przekazujący przelew do SORBNet.")
+@XmlType(propOrder = {
+        "paymentId",
+        "amount",
+        "currency",
+        "senderBankId",
+        "receiverBankId",
+        "senderAccount",
+        "receiverAccount",
+        "title",
+        "status"
+})
+@Schema(
+        name = "SorbnetPaymentRequest",
+        description = "Żądanie XML utworzenia przelewu w systemie SORBNet."
+)
 public class SorbnetPaymentDto {
 
-    @XmlElement
-    @Schema(description = "Unikalny identyfikator przelewu.", example = "SORB-20260527-0001")
+    @Schema(description = "Unikalny identyfikator przelewu.", example = "713e52f6-9fa2-4baf-a0a6-68b4dff987e7")
     private String paymentId;
 
-    @XmlElement
-    @Schema(description = "Kwota przelewu.", example = "1250000.00")
+    @Schema(description = "Kwota przelewu.", example = "1000.00", requiredMode = Schema.RequiredMode.REQUIRED)
     private BigDecimal amount;
 
-    @XmlElement
-    @Schema(description = "Kod waluty ISO 4217.", example = "PLN")
+    @Schema(description = "Kod waluty przelewu.", example = "PLN")
     private String currency;
 
-    @XmlElement
-    @Schema(description = "Identyfikator banku nadawcy (używany do rozrachunku).", example = "PKO")
+    @Schema(description = "Identyfikator banku nadawcy.", example = "BANK_A", requiredMode = Schema.RequiredMode.REQUIRED)
     private String senderBankId;
 
-    @XmlElement
-    @Schema(description = "Identyfikator banku odbiorcy (używany do rozrachunku).", example = "PEKAO")
+    @Schema(description = "Identyfikator banku odbiorcy.", example = "BANK_B", requiredMode = Schema.RequiredMode.REQUIRED)
     private String receiverBankId;
 
-    @XmlElement
-    @Schema(description = "Numer rachunku nadawcy.", example = "12102010260000042270201111")
+    @Schema(description = "Numer rachunku nadawcy.", example = "11111100000000000000000001", requiredMode = Schema.RequiredMode.REQUIRED)
     private String senderAccount;
 
-    @XmlElement
-    @Schema(description = "Numer rachunku odbiorcy.", example = "47114020040000300201355387")
+    @Schema(description = "Numer rachunku odbiorcy.", example = "22222200000000000000000002", requiredMode = Schema.RequiredMode.REQUIRED)
     private String receiverAccount;
 
-    @XmlElement
     @Schema(description = "Tytuł przelewu.", example = "Rozrachunek rynku międzybankowego")
     private String title;
 
-    @XmlElement
-    @Schema(description = "Status komunikatu wejściowego.", example = "NEW")
+    @Schema(description = "Status wejściowy zlecenia.", example = "NEW")
     private String status;
+
+    public SorbnetPaymentDto() {}
 
     public String getPaymentId() { return paymentId; }
     public void setPaymentId(String paymentId) { this.paymentId = paymentId; }
