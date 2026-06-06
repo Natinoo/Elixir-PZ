@@ -24,7 +24,7 @@ Komunikacja pomiędzy modułami jest realizowana asynchronicznie poprzez Apache 
 
 Poniżej znajdują się szczegółowe opisy techniczne integracji i architektury systemu:
 
-* [📄 Dokumentacja Integracji Asynchronicznej (Kafka): Sorbnet ↔ Elixir](docs/KAFKA_INTEGRATION.md)
+* [Dokumentacja Integracji Asynchronicznej (Kafka): Sorbnet ↔ Elixir](docs/KAFKA_INTEGRATION.md)
 
 Każdy serwis konsumencki posiada własną grupę konsumencką, dzięki czemu wiadomości są przetwarzane niezależnie przez odpowiednie systemy.
 
