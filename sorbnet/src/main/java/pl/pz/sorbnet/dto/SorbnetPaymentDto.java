@@ -8,9 +8,9 @@ import jakarta.xml.bind.annotation.XmlRootElement;
 
 import java.math.BigDecimal;
 
-@XmlRootElement(name = "Payment")
+@XmlRootElement(name = "SorbnetPaymentRequest")
 @XmlAccessorType(XmlAccessType.FIELD)
-@Schema(name = "Payment", description = "Komunikat XML przekazujący przelew/netting do SORBNet.")
+@Schema(name = "SorbnetPaymentRequest", description = "Komunikat XML przekazujący przelew do SORBNet.")
 public class SorbnetPaymentDto {
 
     @XmlElement
@@ -26,77 +26,53 @@ public class SorbnetPaymentDto {
     private String currency;
 
     @XmlElement
-    @Schema(description = "Identyfikator lub rachunek nadawcy.", example = "BANK_A")
+    @Schema(description = "Identyfikator banku nadawcy (używany do rozrachunku).", example = "PKO")
+    private String senderBankId;
+
+    @XmlElement
+    @Schema(description = "Identyfikator banku odbiorcy (używany do rozrachunku).", example = "PEKAO")
+    private String receiverBankId;
+
+    @XmlElement
+    @Schema(description = "Numer rachunku nadawcy.", example = "12102010260000042270201111")
     private String senderAccount;
 
     @XmlElement
-    @Schema(description = "Identyfikator lub rachunek odbiorcy.", example = "BANK_B")
+    @Schema(description = "Numer rachunku odbiorcy.", example = "47114020040000300201355387")
     private String receiverAccount;
 
     @XmlElement
-    @Schema(description = "Tytuł przelewu.", example = "Netting SESSION_1")
+    @Schema(description = "Tytuł przelewu.", example = "Rozrachunek rynku międzybankowego")
     private String title;
 
     @XmlElement
     @Schema(description = "Status komunikatu wejściowego.", example = "NEW")
     private String status;
 
-    public String getSenderBankId() { return senderAccount; }
-    public String getReceiverBankId() { return receiverAccount; }
+    public String getPaymentId() { return paymentId; }
+    public void setPaymentId(String paymentId) { this.paymentId = paymentId; }
 
-    public String getPaymentId() {
-        return paymentId;
-    }
+    public BigDecimal getAmount() { return amount; }
+    public void setAmount(BigDecimal amount) { this.amount = amount; }
 
-    public void setPaymentId(String paymentId) {
-        this.paymentId = paymentId;
-    }
+    public String getCurrency() { return currency; }
+    public void setCurrency(String currency) { this.currency = currency; }
 
-    public BigDecimal getAmount() {
-        return amount;
-    }
+    public String getSenderBankId() { return senderBankId; }
+    public void setSenderBankId(String senderBankId) { this.senderBankId = senderBankId; }
 
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
-    }
+    public String getReceiverBankId() { return receiverBankId; }
+    public void setReceiverBankId(String receiverBankId) { this.receiverBankId = receiverBankId; }
 
-    public String getCurrency() {
-        return currency;
-    }
+    public String getSenderAccount() { return senderAccount; }
+    public void setSenderAccount(String senderAccount) { this.senderAccount = senderAccount; }
 
-    public void setCurrency(String currency) {
-        this.currency = currency;
-    }
+    public String getReceiverAccount() { return receiverAccount; }
+    public void setReceiverAccount(String receiverAccount) { this.receiverAccount = receiverAccount; }
 
-    public String getSenderAccount() {
-        return senderAccount;
-    }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
 
-    public void setSenderAccount(String senderAccount) {
-        this.senderAccount = senderAccount;
-    }
-
-    public String getReceiverAccount() {
-        return receiverAccount;
-    }
-
-    public void setReceiverAccount(String receiverAccount) {
-        this.receiverAccount = receiverAccount;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public void setTitle(String title) {
-        this.title = title;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 }

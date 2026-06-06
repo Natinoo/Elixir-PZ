@@ -43,8 +43,8 @@ public class OpenApiConfig {
                                 .url("https://example.local")))
                 .servers(List.of(
                         new Server()
-                                .url("http://localhost:8080")
-                                .description("Lokalne środowisko developerskie")
+                                .url("/")
+                                .description("Bieżący host")
                 ));
     }
 }

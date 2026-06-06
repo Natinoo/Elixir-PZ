@@ -37,6 +37,14 @@ public class PaymentResponseDto {
     @Schema(description = "Identyfikator banku odbiorcy.", example = "PEKAO")
     private String receiverBankId;
 
+    @JacksonXmlProperty(localName = "senderAccount")
+    @Schema(description = "Numer rachunku nadawcy.", example = "11111100000000000000000001")
+    private String senderAccount;
+
+    @JacksonXmlProperty(localName = "receiverAccount")
+    @Schema(description = "Numer rachunku odbiorcy.", example = "22222200000000000000000002")
+    private String receiverAccount;
+
     @JacksonXmlProperty(localName = "amount")
     @Schema(description = "Kwota przelewu.", example = "1250000.00")
     private BigDecimal amount;
@@ -103,4 +111,9 @@ public class PaymentResponseDto {
     public void setSettledAt(String settledAt) {
         this.settledAt = settledAt;
     }
+    public String getSenderAccount() { return senderAccount; }
+    public void setSenderAccount(String senderAccount) { this.senderAccount = senderAccount; }
+
+    public String getReceiverAccount() { return receiverAccount; }
+    public void setReceiverAccount(String receiverAccount) { this.receiverAccount = receiverAccount; }
 }

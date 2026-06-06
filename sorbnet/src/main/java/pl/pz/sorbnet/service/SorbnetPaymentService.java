@@ -59,6 +59,17 @@ public class SorbnetPaymentService {
         BankAccount receiver = accountRepo.findById(dto.getReceiverBankId())
                 .orElseThrow(() -> new RuntimeException("Nieznany bank: " + dto.getReceiverBankId()));
 
+        if (sender.getAccountNumber() != null
+        && dto.getSenderAccount() != null
+        && !sender.getAccountNumber().equals(dto.getSenderAccount())) {
+            return reject(dto, "SENDER_ACCOUNT_MISMATCH");
+        }
+        if (receiver.getAccountNumber() != null
+                && dto.getReceiverAccount() != null
+                && !receiver.getAccountNumber().equals(dto.getReceiverAccount())) {
+            return reject(dto, "RECEIVER_ACCOUNT_MISMATCH");
+        }
+
         if (sender.isBlocked())   return reject(dto, "SENDER_BLOCKED");
         if (receiver.isBlocked()) return reject(dto, "RECEIVER_BLOCKED");
 

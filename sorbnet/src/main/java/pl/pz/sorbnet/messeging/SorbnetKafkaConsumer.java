@@ -71,8 +71,8 @@ public class SorbnetKafkaConsumer {
             responseDto.setPaymentId(paymentId);
             responseDto.setStatus(status);
             responseDto.setMessage(message);
-            responseDto.setSenderBankId(dto.getSenderAccount());
-            responseDto.setReceiverBankId(dto.getReceiverAccount());
+            responseDto.setSenderBankId(dto.getSenderBankId());
+            responseDto.setReceiverBankId(dto.getReceiverBankId());
             responseDto.setAmount(dto.getAmount());
             responseDto.setSettledAt(LocalDateTime.now().toString());
 
