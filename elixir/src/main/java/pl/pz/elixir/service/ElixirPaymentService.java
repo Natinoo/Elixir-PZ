@@ -89,12 +89,24 @@ public class ElixirPaymentService {
     }
 
     public void updatePaymentStatus(String paymentId, PaymentStatus status) {
-        log.info("Updating payment {} to status {}", paymentId, status);
-        Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> new RuntimeException("Payment not found: " + paymentId));
-        payment.setStatus(status);
-        paymentRepository.save(payment);
+    log.info("Updating payment {} to status {}", paymentId, status);
+
+    Payment payment = paymentRepository.findById(paymentId).orElse(null);
+    if (payment == null) {
+        log.warn("Payment not found for status update: {}", paymentId);
+        return;
     }
+
+    if (payment.getStatus() == status) {
+        log.info("Payment {} already has status {}", paymentId, status);
+        return;
+    }
+
+    payment.setStatus(status);
+    paymentRepository.save(payment);
+
+    log.info("Payment {} updated successfully to status {}", paymentId, status);
+}
 
     private void validatePayment(ElixirPaymentDto paymentDto) {
     if (paymentDto == null) throw new IllegalArgumentException("Brak danych przelewu.");
