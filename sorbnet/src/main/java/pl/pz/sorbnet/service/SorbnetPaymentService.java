@@ -114,11 +114,16 @@ public class SorbnetPaymentService {
         checkDebtAlert(sender);
 
         return Map.of(
-            "paymentId", payment.getPaymentId(),
-            "status", "SETTLED",
-            "message", "Payment processed",
-            "settledAt", payment.getSettledAt().toString()
-        );
+        "paymentId", payment.getPaymentId(),
+        "status", "SETTLED",
+        "message", "Payment processed",
+        "senderBankId", payment.getSenderBankId(),
+        "receiverBankId", payment.getReceiverBankId(),
+        "senderAccount", payment.getSenderAccount(),
+        "receiverAccount", payment.getReceiverAccount(),
+        "amount", payment.getAmount(),
+        "settledAt", payment.getSettledAt().toString()
+    );
     }
 
     public Map<String, Object> simulateDeposit(String targetBankId, BigDecimal amount, String sourceBankId) {
@@ -223,15 +228,33 @@ public class SorbnetPaymentService {
     ));
 
 
-        return Map.of("paymentId", payment.getPaymentId(), "status", "GRIDLOCK_HELD");
+            return Map.of(
+        "paymentId", payment.getPaymentId(),
+        "status", "GRIDLOCK_HELD",
+        "message", "Payment held in gridlock queue",
+        "senderBankId", payment.getSenderBankId(),
+        "receiverBankId", payment.getReceiverBankId(),
+        "senderAccount", payment.getSenderAccount(),
+        "receiverAccount", payment.getReceiverAccount(),
+        "amount", payment.getAmount()
+    );
     }
 
     private Map<String, Object> reject(SorbnetPaymentDto dto, String reason) {
         Payment payment = buildPayment(dto, PaymentStatus.REJECTED);
         payment.setRejectionReason(reason);
         paymentRepo.save(payment);
-        return Map.of("paymentId", payment.getPaymentId(), "status", "REJECTED", "reason", reason);
-    }
+        return Map.of(
+        "paymentId", payment.getPaymentId(),
+        "status", "REJECTED",
+        "message", reason,
+        "senderBankId", payment.getSenderBankId(),
+        "receiverBankId", payment.getReceiverBankId(),
+        "senderAccount", payment.getSenderAccount(),
+        "receiverAccount", payment.getReceiverAccount(),
+        "amount", payment.getAmount()
+    );
+        }
 
     private void checkDebtAlert(BankAccount bank) {
         BigDecimal threshold = bank.getDebtLimit().multiply(BigDecimal.valueOf(0.8));

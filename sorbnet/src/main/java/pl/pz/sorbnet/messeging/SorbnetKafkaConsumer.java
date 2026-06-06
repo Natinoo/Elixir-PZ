@@ -74,15 +74,31 @@ public class SorbnetKafkaConsumer {
             responseDto.setPaymentId(paymentId);
             responseDto.setStatus(status);
             responseDto.setMessage(message);
-            responseDto.setSenderBankId(dto.getSenderBankId());
-            responseDto.setReceiverBankId(dto.getReceiverBankId());
-            responseDto.setSenderAccount(dto.getSenderAccount());
-            responseDto.setReceiverAccount(dto.getReceiverAccount());
-            responseDto.setAmount(dto.getAmount());
-            responseDto.setSettledAt(LocalDateTime.now().toString());
+            responseDto.setSenderBankId(
+                    String.valueOf(result.getOrDefault("senderBankId", dto.getSenderBankId()))
+            );
+            responseDto.setReceiverBankId(
+                    String.valueOf(result.getOrDefault("receiverBankId", dto.getReceiverBankId()))
+            );
+            responseDto.setSenderAccount(
+                    String.valueOf(result.getOrDefault("senderAccount", dto.getSenderAccount()))
+            );
+            responseDto.setReceiverAccount(
+                    String.valueOf(result.getOrDefault("receiverAccount", dto.getReceiverAccount()))
+            );
+            responseDto.setAmount((java.math.BigDecimal) result.getOrDefault("amount", dto.getAmount()));
+            responseDto.setSettledAt(
+                    String.valueOf(result.getOrDefault("settledAt", LocalDateTime.now().toString()))
+            );
 
             String responseXml = toResponseXml(responseDto);
             log.info("[PAYMENT][{}] response payload={}", source, responseXml);
+
+            if ("ELIXIR_EXPRESS".equals(source)) {
+                responseProducer.sendToExpress(paymentId, responseXml);
+            } else {
+                responseProducer.sendToElixir(paymentId, responseXml);
+            }
 
             log.info("[PAYMENT][{}] response sent paymentId={} status={}", source, paymentId, status);
 
@@ -127,6 +143,11 @@ public class SorbnetKafkaConsumer {
             String responseXml = toResponseXml(responseDto);
             log.info("[PAYMENT][{}] error response payload={}", source, responseXml);
 
+            if ("ELIXIR_EXPRESS".equals(source)) {
+                responseProducer.sendToExpress(paymentId, responseXml);
+            } else {
+                responseProducer.sendToElixir(paymentId, responseXml);
+            }
 
         } catch (Exception e) {
             log.error("Cannot send XML error response for paymentId={}", paymentId, e);
