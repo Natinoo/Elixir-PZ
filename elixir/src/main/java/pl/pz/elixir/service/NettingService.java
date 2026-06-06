@@ -16,8 +16,8 @@ public class NettingService {
         Map<String, Double> balanceMap = new HashMap<>();
 
         for (ElixirPaymentDto payment : payments) {
-            String sender = payment.getSenderAccount();
-            String receiver = payment.getReceiverAccount();
+            String sender = payment.getSenderBankId();
+            String receiver = payment.getReceiverBankId();
             Double amount = payment.getAmount();
 
             balanceMap.put(sender, balanceMap.getOrDefault(sender, 0.0) - amount);

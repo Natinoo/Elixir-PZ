@@ -39,11 +39,15 @@ public class SorbnetResponseConsumer {
             );
 
             log.info(
-                    "SORBNet response processed: paymentId={}, sorbnetStatus={}, mappedStatus={}, settledAt={}",
-                    response.getPaymentId(),
-                    response.getStatus(),
-                    mappedStatus,
-                    response.getSettledAt()
+                "SORBNet response processed: paymentId={}, sorbnetStatus={}, mappedStatus={}, senderBankId={}, receiverBankId={}, senderAccount={}, receiverAccount={}, settledAt={}",
+                response.getPaymentId(),
+                response.getStatus(),
+                mappedStatus,
+                response.getSenderBankId(),
+                response.getReceiverBankId(),
+                response.getSenderAccount(),
+                response.getReceiverAccount(),
+                response.getSettledAt()
             );
 
         } catch (Exception e) {

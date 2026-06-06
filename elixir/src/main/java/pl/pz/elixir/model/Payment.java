@@ -23,6 +23,12 @@ public class Payment implements Persistable<String> {
     @Column(name = "payment_id", nullable = false, updatable = false)
     private String paymentId;
 
+    @Column(name = "sender_bank_id", nullable = false)
+    private String senderBankId;
+
+    @Column(name = "receiver_bank_id", nullable = false)
+    private String receiverBankId;
+
     @Column(name = "sender_account", nullable = false)
     private String senderAccount;
 
@@ -52,16 +58,20 @@ public class Payment implements Persistable<String> {
     }
 
     public Payment(
-            String paymentId,
-            String senderAccount,
-            String receiverAccount,
-            Double amount,
-            String currency,
-            String title,
-            PaymentStatus status,
-            LocalDateTime createdAt
+        String paymentId,
+        String senderBankId,
+        String receiverBankId,
+        String senderAccount,
+        String receiverAccount,
+        Double amount,
+        String currency,
+        String title,
+        PaymentStatus status,
+        LocalDateTime createdAt
     ) {
         this.paymentId = paymentId;
+        this.senderBankId = senderBankId;
+        this.receiverBankId = receiverBankId;
         this.senderAccount = senderAccount;
         this.receiverAccount = receiverAccount;
         this.amount = amount;
@@ -123,6 +133,22 @@ public class Payment implements Persistable<String> {
 
     public void setReceiverAccount(String receiverAccount) {
         this.receiverAccount = receiverAccount;
+    }
+
+    public String getSenderBankId() {
+    return senderBankId;
+    }
+
+    public void setSenderBankId(String senderBankId) {
+        this.senderBankId = senderBankId;
+    }
+
+    public String getReceiverBankId() {
+        return receiverBankId;
+    }
+
+    public void setReceiverBankId(String receiverBankId) {
+        this.receiverBankId = receiverBankId;
     }
 
     public Double getAmount() {

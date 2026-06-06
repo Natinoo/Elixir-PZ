@@ -32,18 +32,55 @@ public class ElixirPaymentController {
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
-    @Operation(summary = "Utwórz nowy przelew", description = "Przyjmuje przelew w formacie XML i dodaje go do bieżącej sesji. Przelew otrzymuje status QUEUED.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Przelew przyjęty do sesji",
-                    content = @Content(mediaType = MediaType.APPLICATION_XML_VALUE,
-                            examples = @ExampleObject(value = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<PaymentResponse>\n    <paymentId>123e4567-e89b-12d3-a456-426614174000</paymentId>\n    <status>QUEUED_FOR_SESSION</status>\n</PaymentResponse>"))),
-            @ApiResponse(responseCode = "400", description = "Błędne dane",
-                    content = @Content(mediaType = MediaType.APPLICATION_XML_VALUE,
-                            examples = @ExampleObject(value = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error>\n    <message>Amount must be greater than 0</message>\n</Error>")))
-    })
+@Operation(
+        summary = "Utwórz nowy przelew",
+        description = "Przyjmuje przelew w formacie XML i dodaje go do bieżącej sesji. Przelew otrzymuje status QUEUED.",
+        requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                required = true,
+                content = @Content(
+                        mediaType = MediaType.APPLICATION_XML_VALUE,
+                        examples = @ExampleObject(
+                                name = "XML request",
+                                value = """
+                                        <Payment>
+                                            <paymentId>ELIX-20260606-0001</paymentId>
+                                            <amount>1000.00</amount>
+                                            <currency>PLN</currency>
+                                            <senderBankId>BANK_A</senderBankId>
+                                            <receiverBankId>BANK_B</receiverBankId>
+                                            <senderAccount>11111100000000000000000001</senderAccount>
+                                            <receiverAccount>22222200000000000000000002</receiverAccount>
+                                            <title>Przelew klientowski</title>
+                                        </Payment>
+                                        """
+                        )
+                )
+        )
+)
+@ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Przelew przyjęty do sesji",
+                content = @Content(mediaType = MediaType.APPLICATION_XML_VALUE,
+                        examples = @ExampleObject(value = """
+                                <?xml version="1.0" encoding="UTF-8"?>
+                                <PaymentResponse>
+                                    <paymentId>123e4567-e89b-12d3-a456-426614174000</paymentId>
+                                    <status>QUEUED_FOR_SESSION</status>
+                                </PaymentResponse>
+                                """))),
+        @ApiResponse(responseCode = "400", description = "Błędne dane",
+                content = @Content(mediaType = MediaType.APPLICATION_XML_VALUE,
+                        examples = @ExampleObject(value = """
+                                <?xml version="1.0" encoding="UTF-8"?>
+                                <Error>
+                                    <message>Amount must be greater than 0</message>
+                                </Error>
+                                """)))
+})
+
     public ResponseEntity<String> createPayment(@RequestBody ElixirPaymentDto paymentDto) {
         log.info("=== POST /api/elixir/payments ===");
-        log.info("Received DTO: sender={}, receiver={}, amount={}, title={}",
+        log.info("Received DTO: senderBank={}, receiverBank={}, senderAccount={}, receiverAccount={}, amount={}, title={}",
+                paymentDto.getSenderBankId(), paymentDto.getReceiverBankId(),
                 paymentDto.getSenderAccount(), paymentDto.getReceiverAccount(),
                 paymentDto.getAmount(), paymentDto.getTitle());
         try {

@@ -107,6 +107,15 @@ public class SessionService {
             closeSession("TEST");
         }
     }
+    private String resolveSettlementAccount(String bankId) {
+        return switch (bankId) {
+            case "BANK_A" -> "11111100000000000000000001";
+            case "BANK_B" -> "22222200000000000000000002";
+            case "BANK_C" -> "33333300000000000000000003";
+            case "NBP" -> "10100100000000000000000000";
+            default -> throw new IllegalArgumentException("Brak rachunku rozliczeniowego dla banku: " + bankId);
+        };
+    }
 
     public synchronized void closeSession(String sessionName) {
         if (currentSession.isEmpty()) {
@@ -134,8 +143,10 @@ public class SessionService {
                 settlementDto.setPaymentId(UUID.randomUUID().toString());
                 settlementDto.setAmount(amount);
                 settlementDto.setCurrency("PLN");
-                settlementDto.setSenderAccount(sender);
-                settlementDto.setReceiverAccount(receiver);
+                settlementDto.setSenderBankId(sender);
+                settlementDto.setReceiverBankId(receiver);
+                settlementDto.setSenderAccount(resolveSettlementAccount(sender));
+                settlementDto.setReceiverAccount(resolveSettlementAccount(receiver));
                 settlementDto.setTitle("Netting " + sessionName);
 
                 String settlementXml = toXml(settlementDto);

@@ -39,8 +39,9 @@ public class ElixirPaymentService {
     }
 
     public String processPayment(ElixirPaymentDto paymentDto) {
-        log.info("processPayment called: sender={}, receiver={}, amount={}",
-            paymentDto.getSenderAccount(), paymentDto.getReceiverAccount(), paymentDto.getAmount());
+        log.info("processPayment called: senderBank={}, receiverBank={}, senderAccount={}, receiverAccount={}, amount={}",
+        paymentDto.getSenderBankId(), paymentDto.getReceiverBankId(),
+        paymentDto.getSenderAccount(), paymentDto.getReceiverAccount(), paymentDto.getAmount());
 
         validatePayment(paymentDto);
         log.info("Validation passed");
@@ -51,14 +52,16 @@ public class ElixirPaymentService {
         }
 
         Payment payment = new Payment(
-                paymentDto.getPaymentId(),
-                paymentDto.getSenderAccount(),
-                paymentDto.getReceiverAccount(),
-                paymentDto.getAmount(),
-                paymentDto.getCurrency(),
-                paymentDto.getTitle(),
-                PaymentStatus.QUEUED,
-                LocalDateTime.now()
+            paymentDto.getPaymentId(),
+            paymentDto.getSenderBankId(),
+            paymentDto.getReceiverBankId(),
+            paymentDto.getSenderAccount(),
+            paymentDto.getReceiverAccount(),
+            paymentDto.getAmount(),
+            paymentDto.getCurrency(),
+            paymentDto.getTitle(),
+            PaymentStatus.QUEUED,
+            LocalDateTime.now()
         );
         paymentRepository.save(payment);
         log.info("Payment saved to DB, id={}", payment.getPaymentId());
@@ -94,17 +97,27 @@ public class ElixirPaymentService {
     }
 
     private void validatePayment(ElixirPaymentDto paymentDto) {
-        if (paymentDto == null) throw new IllegalArgumentException("Brak danych przelewu.");
-        if (isBlank(paymentDto.getSenderAccount())) throw new IllegalArgumentException("Bank nadawcy jest wymagany.");
-        if (isBlank(paymentDto.getReceiverAccount())) throw new IllegalArgumentException("Bank odbiorcy jest wymagany.");
-        if (!ALLOWED_BANKS.contains(paymentDto.getSenderAccount())) throw new IllegalArgumentException("Nieprawidłowy bank nadawcy.");
-        if (!ALLOWED_BANKS.contains(paymentDto.getReceiverAccount())) throw new IllegalArgumentException("Nieprawidłowy bank odbiorcy.");
-        if (paymentDto.getSenderAccount().equals(paymentDto.getReceiverAccount())) throw new IllegalArgumentException("Bank nadawcy i odbiorcy nie mogą być takie same.");
-        if (paymentDto.getAmount() == null || paymentDto.getAmount() <= 0) throw new IllegalArgumentException("Kwota musi być większa od zera.");
-        if (isBlank(paymentDto.getCurrency())) throw new IllegalArgumentException("Waluta jest wymagana.");
-        if (!ALLOWED_CURRENCIES.contains(paymentDto.getCurrency())) throw new IllegalArgumentException("Nieobsługiwana waluta.");
-        if (isBlank(paymentDto.getTitle())) throw new IllegalArgumentException("Tytuł przelewu jest wymagany.");
-        if (paymentDto.getTitle().length() > 140) throw new IllegalArgumentException("Tytuł przelewu jest za długi.");
+    if (paymentDto == null) throw new IllegalArgumentException("Brak danych przelewu.");
+
+    if (isBlank(paymentDto.getSenderBankId())) throw new IllegalArgumentException("Bank nadawcy jest wymagany.");
+    if (isBlank(paymentDto.getReceiverBankId())) throw new IllegalArgumentException("Bank odbiorcy jest wymagany.");
+    if (!ALLOWED_BANKS.contains(paymentDto.getSenderBankId())) throw new IllegalArgumentException("Nieprawidłowy bank nadawcy.");
+    if (!ALLOWED_BANKS.contains(paymentDto.getReceiverBankId())) throw new IllegalArgumentException("Nieprawidłowy bank odbiorcy.");
+    if (paymentDto.getSenderBankId().equals(paymentDto.getReceiverBankId())) {
+        throw new IllegalArgumentException("Bank nadawcy i odbiorcy nie mogą być takie same.");
+    }
+
+    if (isBlank(paymentDto.getSenderAccount())) throw new IllegalArgumentException("Rachunek nadawcy jest wymagany.");
+    if (isBlank(paymentDto.getReceiverAccount())) throw new IllegalArgumentException("Rachunek odbiorcy jest wymagany.");
+    if (paymentDto.getSenderAccount().equals(paymentDto.getReceiverAccount())) {
+        throw new IllegalArgumentException("Rachunek nadawcy i odbiorcy nie mogą być takie same.");
+    }
+
+    if (paymentDto.getAmount() == null || paymentDto.getAmount() <= 0) throw new IllegalArgumentException("Kwota musi być większa od zera.");
+    if (isBlank(paymentDto.getCurrency())) throw new IllegalArgumentException("Waluta jest wymagana.");
+    if (!ALLOWED_CURRENCIES.contains(paymentDto.getCurrency())) throw new IllegalArgumentException("Nieobsługiwana waluta.");
+    if (isBlank(paymentDto.getTitle())) throw new IllegalArgumentException("Tytuł przelewu jest wymagany.");
+    if (paymentDto.getTitle().length() > 140) throw new IllegalArgumentException("Tytuł przelewu jest za długi.");
     }
 
     private boolean isBlank(String value) { return value == null || value.isBlank(); }
