@@ -22,11 +22,9 @@ Główne moduły:
 
 Komunikacja pomiędzy modułami jest realizowana asynchronicznie poprzez Apache Kafka, uruchomioną w kontenerze Docker.
 
-W projekcie wykorzystywane są następujące topiki:
+Poniżej znajdują się szczegółowe opisy techniczne integracji i architektury systemu:
 
-- `payments.elixir`
-- `payments.elixir-express`
-- `payments.sorbnet`
+* [📄 Dokumentacja Integracji Asynchronicznej (Kafka): Sorbnet ↔ Elixir](docs/KAFKA_INTEGRATION.md)
 
 Każdy serwis konsumencki posiada własną grupę konsumencką, dzięki czemu wiadomości są przetwarzane niezależnie przez odpowiednie systemy.
 
