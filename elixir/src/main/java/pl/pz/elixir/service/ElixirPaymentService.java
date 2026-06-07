@@ -39,9 +39,16 @@ public class ElixirPaymentService {
     }
 
     public String processPayment(ElixirPaymentDto paymentDto) {
-        log.info("processPayment called: senderBank={}, receiverBank={}, senderAccount={}, receiverAccount={}, amount={}",
-        paymentDto.getSenderBankId(), paymentDto.getReceiverBankId(),
-        paymentDto.getSenderAccount(), paymentDto.getReceiverAccount(), paymentDto.getAmount());
+        log.info("processPayment called: senderAccount={}, receiverAccount={}, amount={}",
+                paymentDto.getSenderAccount(), paymentDto.getReceiverAccount(), paymentDto.getAmount());
+
+        // Uzupełnienie pól bankId na podstawie konta (jeśli brak)
+        if (paymentDto.getSenderBankId() == null || paymentDto.getSenderBankId().isBlank()) {
+            paymentDto.setSenderBankId(paymentDto.getSenderAccount());
+        }
+        if (paymentDto.getReceiverBankId() == null || paymentDto.getReceiverBankId().isBlank()) {
+            paymentDto.setReceiverBankId(paymentDto.getReceiverAccount());
+        }
 
         validatePayment(paymentDto);
         log.info("Validation passed");
@@ -51,17 +58,25 @@ public class ElixirPaymentService {
             log.info("Generated new paymentId: {}", paymentDto.getPaymentId());
         }
 
+        // Mapowanie numerów kont (dla Sorbnet) – zachowując oryginalne identyfikatory banków
+        String originalSenderAccount = paymentDto.getSenderAccount();
+        String originalReceiverAccount = paymentDto.getReceiverAccount();
+        String mappedSenderAccount = mapBankToAccount(originalSenderAccount);
+        String mappedReceiverAccount = mapBankToAccount(originalReceiverAccount);
+        if (mappedSenderAccount != null) paymentDto.setSenderAccount(mappedSenderAccount);
+        if (mappedReceiverAccount != null) paymentDto.setReceiverAccount(mappedReceiverAccount);
+
         Payment payment = new Payment(
-            paymentDto.getPaymentId(),
-            paymentDto.getSenderBankId(),
-            paymentDto.getReceiverBankId(),
-            paymentDto.getSenderAccount(),
-            paymentDto.getReceiverAccount(),
-            paymentDto.getAmount(),
-            paymentDto.getCurrency(),
-            paymentDto.getTitle(),
-            PaymentStatus.QUEUED,
-            LocalDateTime.now()
+                paymentDto.getPaymentId(),
+                paymentDto.getSenderBankId(),
+                paymentDto.getReceiverBankId(),
+                paymentDto.getSenderAccount(),
+                paymentDto.getReceiverAccount(),
+                paymentDto.getAmount(),
+                paymentDto.getCurrency(),
+                paymentDto.getTitle(),
+                PaymentStatus.QUEUED,
+                LocalDateTime.now()
         );
         paymentRepository.save(payment);
         log.info("Payment saved to DB, id={}", payment.getPaymentId());
@@ -70,7 +85,6 @@ public class ElixirPaymentService {
         kafkaTemplate.send("payments.elixir", paymentDto.getPaymentId(), payload);
         log.info("Message sent to Kafka topic 'payments.elixir'");
 
-        // Ręcznie zbudowana odpowiedź XML (bez tworzenia nowej klasy DTO)
         String responseXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
                 "<PaymentResponse>" +
                 "<paymentId>" + paymentDto.getPaymentId() + "</paymentId>" +
@@ -89,47 +103,43 @@ public class ElixirPaymentService {
     }
 
     public void updatePaymentStatus(String paymentId, PaymentStatus status) {
-    log.info("Updating payment {} to status {}", paymentId, status);
-
-    Payment payment = paymentRepository.findById(paymentId).orElse(null);
-    if (payment == null) {
-        log.warn("Payment not found for status update: {}", paymentId);
-        return;
+        log.info("Updating payment {} to status {}", paymentId, status);
+        Payment payment = paymentRepository.findById(paymentId).orElse(null);
+        if (payment == null) {
+            log.warn("Payment not found for status update: {}", paymentId);
+            return;
+        }
+        if (payment.getStatus() == status) {
+            log.info("Payment {} already has status {}", paymentId, status);
+            return;
+        }
+        payment.setStatus(status);
+        paymentRepository.save(payment);
+        log.info("Payment {} updated successfully to status {}", paymentId, status);
     }
-
-    if (payment.getStatus() == status) {
-        log.info("Payment {} already has status {}", paymentId, status);
-        return;
-    }
-
-    payment.setStatus(status);
-    paymentRepository.save(payment);
-
-    log.info("Payment {} updated successfully to status {}", paymentId, status);
-}
 
     private void validatePayment(ElixirPaymentDto paymentDto) {
-    if (paymentDto == null) throw new IllegalArgumentException("Brak danych przelewu.");
+        if (paymentDto == null) throw new IllegalArgumentException("Brak danych przelewu.");
 
-    if (isBlank(paymentDto.getSenderBankId())) throw new IllegalArgumentException("Bank nadawcy jest wymagany.");
-    if (isBlank(paymentDto.getReceiverBankId())) throw new IllegalArgumentException("Bank odbiorcy jest wymagany.");
-    if (!ALLOWED_BANKS.contains(paymentDto.getSenderBankId())) throw new IllegalArgumentException("Nieprawidłowy bank nadawcy.");
-    if (!ALLOWED_BANKS.contains(paymentDto.getReceiverBankId())) throw new IllegalArgumentException("Nieprawidłowy bank odbiorcy.");
-    if (paymentDto.getSenderBankId().equals(paymentDto.getReceiverBankId())) {
-        throw new IllegalArgumentException("Bank nadawcy i odbiorcy nie mogą być takie same.");
-    }
+        if (isBlank(paymentDto.getSenderBankId())) throw new IllegalArgumentException("Bank nadawcy jest wymagany.");
+        if (isBlank(paymentDto.getReceiverBankId())) throw new IllegalArgumentException("Bank odbiorcy jest wymagany.");
+        if (!ALLOWED_BANKS.contains(paymentDto.getSenderBankId())) throw new IllegalArgumentException("Nieprawidłowy bank nadawcy.");
+        if (!ALLOWED_BANKS.contains(paymentDto.getReceiverBankId())) throw new IllegalArgumentException("Nieprawidłowy bank odbiorcy.");
+        if (paymentDto.getSenderBankId().equals(paymentDto.getReceiverBankId())) {
+            throw new IllegalArgumentException("Bank nadawcy i odbiorcy nie mogą być takie same.");
+        }
 
-    if (isBlank(paymentDto.getSenderAccount())) throw new IllegalArgumentException("Rachunek nadawcy jest wymagany.");
-    if (isBlank(paymentDto.getReceiverAccount())) throw new IllegalArgumentException("Rachunek odbiorcy jest wymagany.");
-    if (paymentDto.getSenderAccount().equals(paymentDto.getReceiverAccount())) {
-        throw new IllegalArgumentException("Rachunek nadawcy i odbiorcy nie mogą być takie same.");
-    }
+        if (isBlank(paymentDto.getSenderAccount())) throw new IllegalArgumentException("Rachunek nadawcy jest wymagany.");
+        if (isBlank(paymentDto.getReceiverAccount())) throw new IllegalArgumentException("Rachunek odbiorcy jest wymagany.");
+        if (paymentDto.getSenderAccount().equals(paymentDto.getReceiverAccount())) {
+            throw new IllegalArgumentException("Rachunek nadawcy i odbiorcy nie mogą być takie same.");
+        }
 
-    if (paymentDto.getAmount() == null || paymentDto.getAmount() <= 0) throw new IllegalArgumentException("Kwota musi być większa od zera.");
-    if (isBlank(paymentDto.getCurrency())) throw new IllegalArgumentException("Waluta jest wymagana.");
-    if (!ALLOWED_CURRENCIES.contains(paymentDto.getCurrency())) throw new IllegalArgumentException("Nieobsługiwana waluta.");
-    if (isBlank(paymentDto.getTitle())) throw new IllegalArgumentException("Tytuł przelewu jest wymagany.");
-    if (paymentDto.getTitle().length() > 140) throw new IllegalArgumentException("Tytuł przelewu jest za długi.");
+        if (paymentDto.getAmount() == null || paymentDto.getAmount() <= 0) throw new IllegalArgumentException("Kwota musi być większa od zera.");
+        if (isBlank(paymentDto.getCurrency())) throw new IllegalArgumentException("Waluta jest wymagana.");
+        if (!ALLOWED_CURRENCIES.contains(paymentDto.getCurrency())) throw new IllegalArgumentException("Nieobsługiwana waluta.");
+        if (isBlank(paymentDto.getTitle())) throw new IllegalArgumentException("Tytuł przelewu jest wymagany.");
+        if (paymentDto.getTitle().length() > 140) throw new IllegalArgumentException("Tytuł przelewu jest za długi.");
     }
 
     private boolean isBlank(String value) { return value == null || value.isBlank(); }
@@ -146,5 +156,15 @@ public class ElixirPaymentService {
             log.error("Cannot serialize payment to XML", e);
             throw new RuntimeException("Cannot serialize payment to XML", e);
         }
+    }
+
+    private String mapBankToAccount(String bankId) {
+        if (bankId == null) return null;
+        return switch (bankId) {
+            case "BANK_A" -> "11111100000000000000000001";
+            case "BANK_B" -> "22222200000000000000000002";
+            case "BANK_C" -> "33333300000000000000000003";
+            default -> bankId;
+        };
     }
 }

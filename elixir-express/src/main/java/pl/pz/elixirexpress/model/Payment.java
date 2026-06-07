@@ -23,12 +23,6 @@ public class Payment {
     @Column(name = "receiver_bank_id")
     private String receiverBankId;
     
-    @Column(name = "settled_at")
-    private LocalDateTime settledAt;
-    
-    @Column(name = "block_reason")
-    private String blockReason;
-    
     @Enumerated(EnumType.STRING)
     private PaymentStatus status;
 
@@ -73,12 +67,6 @@ public class Payment {
 
     public String getReceiverBankId() { return receiverBankId; }
     public void setReceiverBankId(String receiverBankId) { this.receiverBankId = receiverBankId; }
-
-    public LocalDateTime getSettledAt() { return settledAt; }
-    public void setSettledAt(LocalDateTime settledAt) { this.settledAt = settledAt; }
-
-    public String getBlockReason() { return blockReason; }
-    public void setBlockReason(String blockReason) { this.blockReason = blockReason; }
 
     public PaymentStatus getStatus() { return status; }
     public void setStatus(PaymentStatus status) { this.status = status; }

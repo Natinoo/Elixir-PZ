@@ -48,6 +48,24 @@ public class ExpressPaymentService {
             log.info("Generated new paymentId: {}", paymentDto.getPaymentId());
         }
 
+        // Zapamiętaj oryginalne identyfikatory banków (BANK_A, BANK_B, BANK_C)
+        String originalSender = paymentDto.getSenderAccount();
+        String originalReceiver = paymentDto.getReceiverAccount();
+
+        // Mapowanie na numery kont rozliczeniowych (dla Sorbnet)
+        String mappedSender = mapBankToAccount(originalSender);
+        String mappedReceiver = mapBankToAccount(originalReceiver);
+        if (mappedSender != null) paymentDto.setSenderAccount(mappedSender);
+        if (mappedReceiver != null) paymentDto.setReceiverAccount(mappedReceiver);
+
+        // Ustawienie identyfikatorów banków (wymagane przez Sorbnet, pozostają oryginalne)
+        if (paymentDto.getSenderBankId() == null || paymentDto.getSenderBankId().isBlank()) {
+            paymentDto.setSenderBankId(originalSender);
+        }
+        if (paymentDto.getReceiverBankId() == null || paymentDto.getReceiverBankId().isBlank()) {
+            paymentDto.setReceiverBankId(originalReceiver);
+        }
+
         Payment payment = new Payment(
                 paymentDto.getSenderAccount(),
                 paymentDto.getReceiverAccount(),
@@ -57,6 +75,9 @@ public class ExpressPaymentService {
         );
         payment.setPaymentId(paymentDto.getPaymentId());
         payment.setStatus(PaymentStatus.QUEUED);
+        payment.setSenderBankId(paymentDto.getSenderBankId());
+        payment.setReceiverBankId(paymentDto.getReceiverBankId());
+
         paymentRepository.save(payment);
         log.info("Payment saved to DB: {}", paymentDto.getPaymentId());
 
@@ -147,5 +168,15 @@ public class ExpressPaymentService {
         if (paymentDto.getTitle() == null || paymentDto.getTitle().isBlank()) {
             throw new IllegalArgumentException("Title is required");
         }
+    }
+
+    private String mapBankToAccount(String bankId) {
+        if (bankId == null) return null;
+        return switch (bankId) {
+            case "BANK_A" -> "11111100000000000000000001";
+            case "BANK_B" -> "22222200000000000000000002";
+            case "BANK_C" -> "33333300000000000000000003";
+            default -> bankId;
+        };
     }
 }
