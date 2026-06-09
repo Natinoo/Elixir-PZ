@@ -50,6 +50,8 @@ public class SorbnetPaymentService {
     public Map<String, Object> process(SorbnetPaymentDto dto) {
         if (dto.getPaymentId() == null) dto.setPaymentId(UUID.randomUUID().toString());
 
+          dto.setSenderBankId(normalizeBankId(dto.getSenderBankId()));
+          dto.setReceiverBankId(normalizeBankId(dto.getReceiverBankId()));
         if (paymentRepo.existsById(dto.getPaymentId())) {
             Payment existing = paymentRepo.findById(dto.getPaymentId()).get();
             return Map.of(
@@ -289,6 +291,10 @@ public class SorbnetPaymentService {
         p.setStatus(status);
         p.setCreatedAt(LocalDateTime.now());
         return p;
+    }
+    
+    private String normalizeBankId(String bankId) {
+    return bankId == null ? null : bankId.trim().toUpperCase();
     }
 
 

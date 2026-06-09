@@ -63,19 +63,37 @@ public class OperatorController {
                 value = """
                     [
                       {
-                        "bankId": "PKO",
-                        "bankName": "PKO Bank Polski",
-                        "balance": 15000000.00,
-                        "debtLimit": 30000000.00,
+                        "bankId": "NBP",
+                        "bankName": "Narodowy Bank Polski",
+                        "balance": 10000000.00,
+                        "debtLimit": 0.00,
                         "blocked": false,
                         "overlimitSince": null,
                         "blockedAt": null
                       },
                       {
-                        "bankId": "PEKAO",
-                        "bankName": "Bank Pekao SA",
-                        "balance": -5000000.00,
-                        "debtLimit": 25000000.00,
+                        "bankId": "BANK_A",
+                        "bankName": "Bank A",
+                        "balance": 5000000.00,
+                        "debtLimit": 2000000.00,
+                        "blocked": false,
+                        "overlimitSince": null,
+                        "blockedAt": null
+                      },
+                      {
+                        "bankId": "BANK_B",
+                        "bankName": "Bank B",
+                        "balance": 5000000.00,
+                        "debtLimit": 2000000.00,
+                        "blocked": false,
+                        "overlimitSince": null,
+                        "blockedAt": null
+                      },
+                      {
+                        "bankId": "BANK_C",
+                        "bankName": "Bank C",
+                        "balance": 5000000.00,
+                        "debtLimit": 2000000.00,
                         "blocked": false,
                         "overlimitSince": null,
                         "blockedAt": null
@@ -108,7 +126,7 @@ public class OperatorController {
                 examples = @ExampleObject(
                     value = """
                         {
-                          "bankId": "PKO",
+                          "bankId": "BANK_A",
                           "status": "BLOCKED"
                         }
                         """
@@ -123,7 +141,7 @@ public class OperatorController {
     })
     @PostMapping("/banks/{bankId}/block")
     public ResponseEntity<Map<String, Object>> block(
-            @Parameter(description = "Identyfikator banku.", example = "PKO")
+            @Parameter(description = "Identyfikator banku.", example = "BANK_A")
             @PathVariable String bankId) {
         gridlockService.blockBank(bankId);
         return ResponseEntity.ok(Map.of("bankId", bankId, "status", "BLOCKED"));
@@ -146,7 +164,7 @@ public class OperatorController {
                 examples = @ExampleObject(
                     value = """
                         {
-                          "bankId": "PKO",
+                          "bankId": "BANK_A",
                           "status": "UNBLOCKED"
                         }
                         """
@@ -161,7 +179,7 @@ public class OperatorController {
     })
     @PostMapping("/banks/{bankId}/unblock")
     public ResponseEntity<Map<String, Object>> unblock(
-            @Parameter(description = "Identyfikator banku.", example = "PKO")
+            @Parameter(description = "Identyfikator banku.", example = "BANK_A")
             @PathVariable String bankId) {
         gridlockService.unblockBank(bankId);
         return ResponseEntity.ok(Map.of("bankId", bankId, "status", "UNBLOCKED"));
@@ -186,12 +204,12 @@ public class OperatorController {
                 value = """
                     [
                       {
-                        "bankId": "PKO",
-                        "bankName": "PKO Bank Polski",
-                        "balance": -35000000.00,
-                        "debtLimit": 30000000.00,
+                        "bankId": "BANK_A",
+                        "bankName": "Bank A",
+                        "balance": -3500000.00,
+                        "debtLimit": 2000000.00,
                         "blocked": false,
-                        "overlimitSince": "2026-05-27T15:00:00",
+                        "overlimitSince": "2026-06-09T11:00:00",
                         "blockedAt": null
                       }
                     ]
@@ -223,12 +241,16 @@ public class OperatorController {
                 value = """
                     [
                       {
-                        "id": 15,
-                        "senderBankId": "PKO",
-                        "receiverBankId": "PEKAO",
-                        "amount": 12000000.00,
+                        "paymentId": "SORB-20260609-0002",
+                        "senderBankId": "BANK_A",
+                        "receiverBankId": "BANK_C",
+                        "senderAccount": "11111100000000000000000001",
+                        "receiverAccount": "33333300000000000000000003",
+                        "amount": 8000000.00,
+                        "currency": "PLN",
+                        "title": "Duży przelew rozrachunkowy",
                         "status": "GRIDLOCK_HELD",
-                        "submittedAt": "2026-05-27T16:10:00",
+                        "createdAt": "2026-06-09T12:00:00",
                         "settledAt": null
                       }
                     ]
@@ -257,22 +279,48 @@ public class OperatorController {
             content = @Content(
                 mediaType = "application/json",
                 schema = @Schema(implementation = Payment.class),
-                examples = @ExampleObject(
-                    name = "Przelewy operatora",
-                    value = """
-                        [
-                          {
-                            "id": 21,
-                            "senderBankId": "PKO",
-                            "receiverBankId": "MBANK",
-                            "amount": 3500000.00,
-                            "status": "SETTLED",
-                            "submittedAt": "2026-05-27T09:15:00",
-                            "settledAt": "2026-05-27T09:15:03"
-                          }
-                        ]
-                        """
-                )
+                examples = {
+                    @ExampleObject(
+                        name = "Wszystkie rozliczone",
+                        value = """
+                            [
+                              {
+                                "paymentId": "SORB-20260609-0001",
+                                "senderBankId": "BANK_A",
+                                "receiverBankId": "BANK_B",
+                                "senderAccount": "11111100000000000000000001",
+                                "receiverAccount": "22222200000000000000000002",
+                                "amount": 1000000.00,
+                                "currency": "PLN",
+                                "title": "Rozrachunek międzybankowy",
+                                "status": "SETTLED",
+                                "createdAt": "2026-06-09T13:00:00",
+                                "settledAt": "2026-06-09T13:00:01"
+                              }
+                            ]
+                            """
+                    ),
+                    @ExampleObject(
+                        name = "Odrzucone dla BANK_B",
+                        value = """
+                            [
+                              {
+                                "paymentId": "SORB-20260609-0005",
+                                "senderBankId": "BANK_B",
+                                "receiverBankId": "BANK_C",
+                                "senderAccount": "22222200000000000000000002",
+                                "receiverAccount": "33333300000000000000000003",
+                                "amount": 500000.00,
+                                "currency": "PLN",
+                                "title": "Przelew odrzucony",
+                                "status": "REJECTED",
+                                "createdAt": "2026-06-09T10:00:00",
+                                "settledAt": null
+                              }
+                            ]
+                            """
+                    )
+                }
             )
         ),
         @ApiResponse(
@@ -296,7 +344,7 @@ public class OperatorController {
             @Parameter(
                 name = "status",
                 in = ParameterIn.QUERY,
-                description = "Status przelewu. Dozwolone wartości wynikają z enuma PaymentStatus.",
+                description = "Status przelewu. Dozwolone wartości: SETTLED, GRIDLOCK_HELD, REJECTED.",
                 example = "SETTLED",
                 schema = @Schema(implementation = PaymentStatus.class)
             )
@@ -306,7 +354,7 @@ public class OperatorController {
                 name = "bankId",
                 in = ParameterIn.QUERY,
                 description = "Identyfikator banku występującego jako nadawca lub odbiorca przelewu.",
-                example = "PKO"
+                example = "BANK_A"
             )
             @RequestParam(required = false) String bankId) {
 
@@ -345,13 +393,30 @@ public class OperatorController {
                 value = """
                     [
                       {
-                        "id": 31,
-                        "senderBankId": "PKO",
-                        "receiverBankId": "ING",
-                        "amount": 8000000.00,
+                        "paymentId": "SORB-20260609-0001",
+                        "senderBankId": "BANK_A",
+                        "receiverBankId": "BANK_B",
+                        "senderAccount": "11111100000000000000000001",
+                        "receiverAccount": "22222200000000000000000002",
+                        "amount": 1000000.00,
+                        "currency": "PLN",
+                        "title": "Rozrachunek międzybankowy",
                         "status": "SETTLED",
-                        "submittedAt": "2026-05-27T11:00:00",
-                        "settledAt": "2026-05-27T11:00:02"
+                        "createdAt": "2026-06-09T13:00:00",
+                        "settledAt": "2026-06-09T13:00:01"
+                      },
+                      {
+                        "paymentId": "SORB-20260609-0004",
+                        "senderBankId": "NBP",
+                        "receiverBankId": "BANK_A",
+                        "senderAccount": "10100100000000000000000000",
+                        "receiverAccount": "11111100000000000000000001",
+                        "amount": 3000000.00,
+                        "currency": "PLN",
+                        "title": "Zasilenie rachunku rozrachunkowego przez NBP",
+                        "status": "SETTLED",
+                        "createdAt": "2026-06-09T12:30:00",
+                        "settledAt": "2026-06-09T12:30:01"
                       }
                     ]
                     """

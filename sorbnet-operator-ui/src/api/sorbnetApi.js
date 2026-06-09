@@ -8,3 +8,4 @@ export const fetchGridlock = () => axios.get(`${BASE}/gridlock`).then(r => r.dat
 export const fetchEmergencies = () => axios.get(`${BASE}/emergencies`).then(r => r.data);
 export const blockBank = (bankId) => axios.post(`${BASE}/banks/${bankId}/block`).then(r => r.data);
 export const unblockBank = (bankId) => axios.post(`${BASE}/banks/${bankId}/unblock`).then(r => r.data);
+export const fetchSettledToday = () => axios.get(`${BASE}/payments/settled-today`).then(r => r.data);
