@@ -11,9 +11,11 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import pl.pz.sorbnet.dto.PaymentListResponseDto;
 import pl.pz.sorbnet.dto.PaymentResponseDto;
 import pl.pz.sorbnet.dto.SorbnetPaymentDto;
@@ -67,15 +69,15 @@ public class SorbnetPaymentController {
                         name = "Rozliczony",
                         value = """
                             <SorbnetPaymentResponse>
-                                <paymentId>SORB-20260527-0001</paymentId>
+                                <paymentId>SORB-20260609-0001</paymentId>
                                 <status>SETTLED</status>
                                 <message>Przelew został rozliczony</message>
-                                <senderBankId>PKO</senderBankId>
-                                <receiverBankId>PEKAO</receiverBankId>
+                                <senderBankId>BANK_A</senderBankId>
+                                <receiverBankId>BANK_B</receiverBankId>
                                 <senderAccount>11111100000000000000000001</senderAccount>
                                 <receiverAccount>22222200000000000000000002</receiverAccount>
-                                <amount>1250000.00</amount>
-                                <settledAt>2026-05-27T17:45:21</settledAt>
+                                <amount>1000000.00</amount>
+                                <settledAt>2026-06-09T13:00:00</settledAt>
                             </SorbnetPaymentResponse>
                             """
                     ),
@@ -83,12 +85,14 @@ public class SorbnetPaymentController {
                         name = "Idempotent",
                         value = """
                             <SorbnetPaymentResponse>
-                                <paymentId>SORB-20260527-0001</paymentId>
+                                <paymentId>SORB-20260609-0001</paymentId>
                                 <status>SETTLED</status>
                                 <message>Przelew już przetworzony (idempotent)</message>
-                                <senderBankId>PKO</senderBankId>
-                                <receiverBankId>PEKAO</receiverBankId>
-                                <amount>1250000.00</amount>
+                                <senderBankId>BANK_A</senderBankId>
+                                <receiverBankId>BANK_B</receiverBankId>
+                                <senderAccount>11111100000000000000000001</senderAccount>
+                                <receiverAccount>22222200000000000000000002</receiverAccount>
+                                <amount>1000000.00</amount>
                             </SorbnetPaymentResponse>
                             """
                     ),
@@ -96,14 +100,29 @@ public class SorbnetPaymentController {
                         name = "Gridlock",
                         value = """
                             <SorbnetPaymentResponse>
-                                <paymentId>SORB-20260527-0002</paymentId>
+                                <paymentId>SORB-20260609-0002</paymentId>
                                 <status>GRIDLOCK_HELD</status>
                                 <message>Przelew został wstrzymany w kolejce gridlock</message>
-                                <senderBankId>PKO</senderBankId>
-                                <receiverBankId>PEKAO</receiverBankId>
+                                <senderBankId>BANK_A</senderBankId>
+                                <receiverBankId>BANK_C</receiverBankId>
+                                <senderAccount>11111100000000000000000001</senderAccount>
+                                <receiverAccount>33333300000000000000000003</receiverAccount>
+                                <amount>8000000.00</amount>
+                            </SorbnetPaymentResponse>
+                            """
+                    ),
+                    @ExampleObject(
+                        name = "Odrzucony — bank zablokowany",
+                        value = """
+                            <SorbnetPaymentResponse>
+                                <paymentId>SORB-20260609-0003</paymentId>
+                                <status>REJECTED</status>
+                                <message>SENDER_BLOCKED</message>
+                                <senderBankId>BANK_A</senderBankId>
+                                <receiverBankId>BANK_B</receiverBankId>
                                 <senderAccount>11111100000000000000000001</senderAccount>
                                 <receiverAccount>22222200000000000000000002</receiverAccount>
-                                <amount>50000000.00</amount>
+                                <amount>500000.00</amount>
                             </SorbnetPaymentResponse>
                             """
                     )
@@ -134,22 +153,72 @@ public class SorbnetPaymentController {
                 content = @Content(
                     mediaType = MediaType.APPLICATION_XML_VALUE,
                     schema = @Schema(implementation = SorbnetPaymentDto.class),
-                    examples = @ExampleObject(
-                        name = "XML request",
-                        value = """
-                            <SorbnetPaymentRequest>
-                                <paymentId>SORB-20260527-0001</paymentId>
-                                <amount>1250000.00</amount>
-                                <currency>PLN</currency>
-                                <senderBankId>PKO</senderBankId>
-                                <receiverBankId>PEKAO</receiverBankId>
-                                <senderAccount>12102010260000042270201111</senderAccount>
-                                <receiverAccount>47114020040000300201355387</receiverAccount>
-                                <title>Rozrachunek rynku międzybankowego</title>
-                                <status>NEW</status>
-                            </SorbnetPaymentRequest>
-                            """
-                    )
+                    examples = {
+                        @ExampleObject(
+                            name = "BANK_A → BANK_B (standardowy)",
+                            value = """
+                                <SorbnetPaymentRequest>
+                                    <paymentId>SORB-20260609-0001</paymentId>
+                                    <amount>1000000.00</amount>
+                                    <currency>PLN</currency>
+                                    <senderBankId>BANK_A</senderBankId>
+                                    <receiverBankId>BANK_B</receiverBankId>
+                                    <senderAccount>11111100000000000000000001</senderAccount>
+                                    <receiverAccount>22222200000000000000000002</receiverAccount>
+                                    <title>Rozrachunek międzybankowy</title>
+                                    <status>NEW</status>
+                                </SorbnetPaymentRequest>
+                                """
+                        ),
+                        @ExampleObject(
+                            name = "BANK_A → BANK_C (gridlock — kwota powyżej limitu)",
+                            value = """
+                                <SorbnetPaymentRequest>
+                                    <paymentId>SORB-20260609-0002</paymentId>
+                                    <amount>8000000.00</amount>
+                                    <currency>PLN</currency>
+                                    <senderBankId>BANK_A</senderBankId>
+                                    <receiverBankId>BANK_C</receiverBankId>
+                                    <senderAccount>11111100000000000000000001</senderAccount>
+                                    <receiverAccount>33333300000000000000000003</receiverAccount>
+                                    <title>Duży przelew rozrachunkowy</title>
+                                    <status>NEW</status>
+                                </SorbnetPaymentRequest>
+                                """
+                        ),
+                        @ExampleObject(
+                            name = "BANK_B → BANK_C (rachunek pomocniczy)",
+                            value = """
+                                <SorbnetPaymentRequest>
+                                    <paymentId>SORB-20260609-0003</paymentId>
+                                    <amount>500000.00</amount>
+                                    <currency>PLN</currency>
+                                    <senderBankId>BANK_B</senderBankId>
+                                    <receiverBankId>BANK_C</receiverBankId>
+                                    <senderAccount>22222200000000000000000003</senderAccount>
+                                    <receiverAccount>33333300000000000000000003</receiverAccount>
+                                    <title>Przelew pomocniczy</title>
+                                    <status>NEW</status>
+                                </SorbnetPaymentRequest>
+                                """
+                        ),
+                        @ExampleObject(
+                            name = "NBP → BANK_A (dokapitalizowanie)",
+                            value = """
+                                <SorbnetPaymentRequest>
+                                    <paymentId>SORB-20260609-0004</paymentId>
+                                    <amount>3000000.00</amount>
+                                    <currency>PLN</currency>
+                                    <senderBankId>NBP</senderBankId>
+                                    <receiverBankId>BANK_A</receiverBankId>
+                                    <senderAccount>10100100000000000000000000</senderAccount>
+                                    <receiverAccount>11111100000000000000000001</receiverAccount>
+                                    <title>Zasilenie rachunku rozrachunkowego przez NBP</title>
+                                    <status>NEW</status>
+                                </SorbnetPaymentRequest>
+                                """
+                        )
+                    }
                 )
             )
             @org.springframework.web.bind.annotation.RequestBody SorbnetPaymentDto dto) {
@@ -178,23 +247,25 @@ public class SorbnetPaymentController {
                     value = """
                         <Payments>
                             <payment>
-                                <paymentId>SORB-20260527-0001</paymentId>
+                                <paymentId>SORB-20260609-0001</paymentId>
                                 <status>SETTLED</status>
                                 <message>Przelew został rozliczony</message>
-                                <senderBankId>PKO</senderBankId>
-                                <receiverBankId>PEKAO</receiverBankId>
+                                <senderBankId>BANK_A</senderBankId>
+                                <receiverBankId>BANK_B</receiverBankId>
                                 <senderAccount>11111100000000000000000001</senderAccount>
                                 <receiverAccount>22222200000000000000000002</receiverAccount>
-                                <amount>1250000.00</amount>
-                                <settledAt>2026-05-27T17:45:21</settledAt>
+                                <amount>1000000.00</amount>
+                                <settledAt>2026-06-09T13:00:00</settledAt>
                             </payment>
                             <payment>
-                                <paymentId>SORB-20260527-0002</paymentId>
+                                <paymentId>SORB-20260609-0002</paymentId>
                                 <status>GRIDLOCK_HELD</status>
                                 <message>Przelew oczekuje w kolejce gridlock</message>
-                                <senderBankId>PKO</senderBankId>
-                                <receiverBankId>ING</receiverBankId>
-                                <amount>9800000.00</amount>
+                                <senderBankId>BANK_A</senderBankId>
+                                <receiverBankId>BANK_C</receiverBankId>
+                                <senderAccount>11111100000000000000000001</senderAccount>
+                                <receiverAccount>33333300000000000000000003</receiverAccount>
+                                <amount>8000000.00</amount>
                             </payment>
                         </Payments>
                         """
@@ -214,7 +285,7 @@ public class SorbnetPaymentController {
                 in = ParameterIn.QUERY,
                 required = true,
                 description = "Identyfikator banku, dla którego pobierana jest historia przelewów.",
-                example = "PKO"
+                example = "BANK_A"
             )
             @RequestParam String bankId,
 
@@ -222,7 +293,7 @@ public class SorbnetPaymentController {
                 name = "from",
                 in = ParameterIn.QUERY,
                 description = "Data początkowa w formacie yyyy-MM-dd. Jeżeli brak, system zwraca przelewy od początku bieżącego dnia.",
-                example = "2026-05-01"
+                example = "2026-06-01"
             )
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from) {
@@ -260,15 +331,15 @@ public class SorbnetPaymentController {
                     name = "XML payment details",
                     value = """
                         <SorbnetPaymentResponse>
-                            <paymentId>SORB-20260527-0001</paymentId>
+                            <paymentId>SORB-20260609-0001</paymentId>
                             <status>SETTLED</status>
                             <message>Przelew został rozliczony</message>
-                            <senderBankId>PKO</senderBankId>
-                            <receiverBankId>PEKAO</receiverBankId>
+                            <senderBankId>BANK_A</senderBankId>
+                            <receiverBankId>BANK_B</receiverBankId>
                             <senderAccount>11111100000000000000000001</senderAccount>
                             <receiverAccount>22222200000000000000000002</receiverAccount>
-                            <amount>1250000.00</amount>
-                            <settledAt>2026-05-27T17:45:21</settledAt>
+                            <amount>1000000.00</amount>
+                            <settledAt>2026-06-09T13:00:00</settledAt>
                         </SorbnetPaymentResponse>
                         """
                 )
@@ -284,12 +355,13 @@ public class SorbnetPaymentController {
     public PaymentResponseDto getById(
             @Parameter(
                 description = "Unikalny identyfikator przelewu.",
-                example = "SORB-20260527-0001"
+                example = "SORB-20260609-0001"
             )
             @PathVariable String paymentId) {
 
         Payment payment = paymentRepo.findById(paymentId)
-                .orElseThrow(() -> new RuntimeException("Nie znaleziono: " + paymentId));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Nie znaleziono przelewu: " + paymentId));
 
         return mapPaymentToResponse(payment);
     }
@@ -345,10 +417,10 @@ public class SorbnetPaymentController {
 
     private String defaultMessage(String status) {
         return switch (status) {
-            case "SETTLED" -> "Przelew został rozliczony";
-            case "GRIDLOCK_HELD" -> "Przelew oczekuje w kolejce gridlock";
-            case "REJECTED" -> "Przelew został odrzucony";
-            default -> "Brak dodatkowej informacji";
+            case "SETTLED"      -> "Przelew został rozliczony";
+            case "GRIDLOCK_HELD"-> "Przelew oczekuje w kolejce gridlock";
+            case "REJECTED"     -> "Przelew został odrzucony";
+            default             -> "Brak dodatkowej informacji";
         };
     }
 }

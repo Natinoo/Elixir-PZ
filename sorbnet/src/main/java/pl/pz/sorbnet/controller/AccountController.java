@@ -9,8 +9,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import pl.pz.sorbnet.model.BankAccount;
 import pl.pz.sorbnet.repository.BankAccountRepository;
 import pl.pz.sorbnet.service.SorbnetPaymentService;
@@ -49,7 +51,50 @@ public class AccountController {
             description = "Lista rachunków rozliczeniowych została zwrócona poprawnie.",
             content = @Content(
                 mediaType = "application/json",
-                schema = @Schema(implementation = BankAccount.class)
+                schema = @Schema(implementation = BankAccount.class),
+                examples = @ExampleObject(
+                    name = "Lista wszystkich rachunków",
+                    value = """
+                        [
+                          {
+                            "bankId": "NBP",
+                            "bankName": "Narodowy Bank Polski",
+                            "balance": 10000000.00,
+                            "debtLimit": 0.00,
+                            "blocked": false,
+                            "overlimitSince": null,
+                            "blockedAt": null
+                          },
+                          {
+                            "bankId": "BANK_A",
+                            "bankName": "Bank A",
+                            "balance": 5000000.00,
+                            "debtLimit": 2000000.00,
+                            "blocked": false,
+                            "overlimitSince": null,
+                            "blockedAt": null
+                          },
+                          {
+                            "bankId": "BANK_B",
+                            "bankName": "Bank B",
+                            "balance": 5000000.00,
+                            "debtLimit": 2000000.00,
+                            "blocked": false,
+                            "overlimitSince": null,
+                            "blockedAt": null
+                          },
+                          {
+                            "bankId": "BANK_C",
+                            "bankName": "Bank C",
+                            "balance": 5000000.00,
+                            "debtLimit": 2000000.00,
+                            "blocked": false,
+                            "overlimitSince": null,
+                            "blockedAt": null
+                          }
+                        ]
+                        """
+                )
             )
         )
     })
@@ -77,10 +122,10 @@ public class AccountController {
                     name = "Przykładowy rachunek",
                     value = """
                         {
-                          "bankId": "PKO",
-                          "bankName": "PKO Bank Polski",
-                          "balance": 15000000.00,
-                          "debtLimit": 30000000.00,
+                          "bankId": "BANK_A",
+                          "bankName": "Bank A",
+                          "balance": 5000000.00,
+                          "debtLimit": 2000000.00,
                           "blocked": false,
                           "overlimitSince": null,
                           "blockedAt": null
@@ -99,11 +144,12 @@ public class AccountController {
     public BankAccount get(
             @Parameter(
                 description = "Unikalny identyfikator banku uczestniczącego w systemie.",
-                example = "PKO"
+                example = "BANK_A"
             )
             @PathVariable String bankId) {
         return accountRepo.findById(bankId)
-                .orElseThrow(() -> new RuntimeException("Nie znaleziono banku: " + bankId));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Nie znaleziono banku: " + bankId));
     }
 
     @Operation(
@@ -126,11 +172,14 @@ public class AccountController {
                         name = "Rachunek aktywny",
                         value = """
                             {
-                              "bankId": "PKO",
-                              "balance": 15000000.00,
-                              "debtLimit": 30000000.00,
+                              "bankId": "BANK_A",
+                              "bankName": "Bank A",
+                              "balance": 5000000.00,
+                              "debtLimit": 2000000.00,
+                              "availableCredit": 7000000.00,
+                              "minDepositToRestore": 0.00,
                               "blocked": false,
-                              "overlimit": false
+                              "overlimitSince": null
                             }
                             """
                     ),
@@ -138,12 +187,14 @@ public class AccountController {
                         name = "Przekroczony limit",
                         value = """
                             {
-                              "bankId": "PKO",
-                              "balance": -35000000.00,
-                              "debtLimit": 30000000.00,
+                              "bankId": "BANK_A",
+                              "bankName": "Bank A",
+                              "balance": -3500000.00,
+                              "debtLimit": 2000000.00,
+                              "availableCredit": -1500000.00,
+                              "minDepositToRestore": 1500000.00,
                               "blocked": false,
-                              "overlimit": true,
-                              "overlimitSince": "2026-05-27T15:00:00"
+                              "overlimitSince": "2026-06-09T11:00:00"
                             }
                             """
                     ),
@@ -151,11 +202,14 @@ public class AccountController {
                         name = "Bank zablokowany",
                         value = """
                             {
-                              "bankId": "PKO",
-                              "balance": -42000000.00,
-                              "debtLimit": 30000000.00,
+                              "bankId": "BANK_B",
+                              "bankName": "Bank B",
+                              "balance": -4500000.00,
+                              "debtLimit": 2000000.00,
+                              "availableCredit": -2500000.00,
+                              "minDepositToRestore": 2500000.00,
                               "blocked": true,
-                              "blockedAt": "2026-05-27T17:00:00"
+                              "overlimitSince": "2026-06-09T09:00:00"
                             }
                             """
                     )
@@ -172,7 +226,7 @@ public class AccountController {
     public ResponseEntity<Map<String, Object>> status(
             @Parameter(
                 description = "Identyfikator banku, dla którego pobierany jest bieżący status rachunku rozliczeniowego.",
-                example = "PKO"
+                example = "BANK_A"
             )
             @PathVariable String bankId) {
         return ResponseEntity.ok(paymentService.getAccountStatus(bankId));
@@ -199,11 +253,11 @@ public class AccountController {
                         name = "Zasilenie przez NBP",
                         value = """
                             {
-                              "bankId": "PKO",
-                              "sourceBankId": "NBP",
-                              "amount": 25000000.00,
-                              "balanceAfter": 5000000.00,
-                              "status": "DEPOSIT_ACCEPTED"
+                              "bankId": "BANK_A",
+                              "depositedAmount": 2000000.00,
+                              "balanceBefore": -3500000.00,
+                              "balanceAfter": -1500000.00,
+                              "overlimitCleared": false
                             }
                             """
                     ),
@@ -211,11 +265,23 @@ public class AccountController {
                         name = "Zasilenie przez inny bank",
                         value = """
                             {
-                              "bankId": "PKO",
-                              "sourceBankId": "PEKAO",
-                              "amount": 10000000.00,
-                              "balanceAfter": -5000000.00,
-                              "status": "DEPOSIT_ACCEPTED"
+                              "bankId": "BANK_A",
+                              "depositedAmount": 4000000.00,
+                              "balanceBefore": -3500000.00,
+                              "balanceAfter": 500000.00,
+                              "overlimitCleared": true
+                            }
+                            """
+                    ),
+                    @ExampleObject(
+                        name = "Zasilenie BANK_C przez NBP — przywrócenie płynności",
+                        value = """
+                            {
+                              "bankId": "BANK_C",
+                              "depositedAmount": 1500000.00,
+                              "balanceBefore": -2500000.00,
+                              "balanceAfter": -1000000.00,
+                              "overlimitCleared": false
                             }
                             """
                     )
@@ -237,7 +303,7 @@ public class AccountController {
     public ResponseEntity<Map<String, Object>> deposit(
             @Parameter(
                 description = "Identyfikator banku, którego rachunek rozliczeniowy ma zostać zasilony.",
-                example = "PKO"
+                example = "BANK_A"
             )
             @PathVariable String bankId,
 
@@ -246,14 +312,14 @@ public class AccountController {
                 in = ParameterIn.QUERY,
                 required = true,
                 description = "Kwota zasilenia rachunku rozliczeniowego.",
-                example = "25000000.00"
+                example = "2000000.00"
             )
             @RequestParam BigDecimal amount,
 
             @Parameter(
                 name = "sourceBankId",
                 in = ParameterIn.QUERY,
-                description = "Identyfikator podmiotu zasilającego rachunek. Domyślnie NBP, ale może to być również inny bank uczestniczący w systemie.",
+                description = "Identyfikator podmiotu zasilającego rachunek. Domyślnie NBP, ale może to być również BANK_B lub BANK_C.",
                 example = "NBP"
             )
             @RequestParam(required = false, defaultValue = "NBP") String sourceBankId) {
