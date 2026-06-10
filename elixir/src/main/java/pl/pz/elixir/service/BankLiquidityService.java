@@ -1,89 +1,114 @@
 package pl.pz.elixir.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import pl.pz.elixir.model.BankAccount;
+import pl.pz.elixir.repository.BankAccountRepository;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class BankLiquidityService {
 
-    // limity zadłużenia
-    private final Map<String, Double> debtLimits = new HashMap<>();
+    private static final Logger log = LoggerFactory.getLogger(BankLiquidityService.class);
 
-    // aktualne salda
-    private final Map<String, Double> balances = new HashMap<>();
+    private final BankAccountRepository bankAccountRepository;
 
-    // blokady banków
-    private final Map<String, Boolean> blockedBanks = new HashMap<>();
-
-    public BankLiquidityService() {
-
-        // przykładowe banki
-        debtLimits.put("BANK_A", -1000.0);
-        debtLimits.put("BANK_B", -1000.0);
-        debtLimits.put("BANK_C", -1000.0);
-
-        balances.put("BANK_A", 0.0);
-        balances.put("BANK_B", 0.0);
-        balances.put("BANK_C", 0.0);
-
-        blockedBanks.put("BANK_A", false);
-        blockedBanks.put("BANK_B", false);
-        blockedBanks.put("BANK_C", false);
+    public BankLiquidityService(BankAccountRepository bankAccountRepository) {
+        this.bankAccountRepository = bankAccountRepository;
     }
 
-    public boolean isBlocked(String bank) {
-        return blockedBanks.getOrDefault(bank, false);
+    public boolean isBlocked(String bankId) {
+        return bankAccountRepository.findById(bankId)
+                .map(BankAccount::isBlocked)
+                .orElse(true); // jeśli bank nie istnieje, uznajemy za zablokowany
     }
 
-    public void applyTransaction(String sender, String receiver, Double amount) {
+    @Transactional
+    public void applyTransaction(String senderId, String receiverId, Double amount) {
+        BankAccount sender = bankAccountRepository.findById(senderId)
+                .orElseThrow(() -> new RuntimeException("Bank nadawcy nie istnieje: " + senderId));
+        BankAccount receiver = bankAccountRepository.findById(receiverId)
+                .orElseThrow(() -> new RuntimeException("Bank odbiorcy nie istnieje: " + receiverId));
 
-        balances.put(sender, balances.getOrDefault(sender, 0.0) - amount);
+        // Aktualizacja sald
+        sender.setBalance(sender.getBalance() - amount);
+        receiver.setBalance(receiver.getBalance() + amount);
 
-        balances.put(receiver, balances.getOrDefault(receiver, 0.0) + amount);
-
-        checkLimit(sender);
-    }
-
-    private void checkLimit(String bank) {
-
-        double balance = balances.getOrDefault(bank, 0.0);
-        double limit = debtLimits.getOrDefault(bank, -1000.0);
-
-        if (balance < limit) {
-
-            blockedBanks.put(bank, true);
-
-            System.out.println("🚨 BANK BLOCKED: " + bank+ " balance=" + balance);
+        // Sprawdzenie limitu dla nadawcy
+        if (sender.getBalance() < -sender.getDebtLimit()) {
+            if (sender.getOverlimitSince() == null) {
+                sender.setOverlimitSince(java.time.LocalDateTime.now());
+            }
+            // Sprawdzenie czy automatycznie zablokować (po 2 godzinach – logika w Sorbnet, tu tylko ostrzeżenie)
+            log.warn("Bank {} przekroczył limit zadłużenia! Saldo: {}, limit: {}",
+                    senderId, sender.getBalance(), -sender.getDebtLimit());
+        } else {
+            sender.setOverlimitSince(null);
         }
+
+        bankAccountRepository.save(sender);
+        bankAccountRepository.save(receiver);
     }
 
-    public void blockBank(String bank) {
-        blockedBanks.put(bank, true);
+    @Transactional
+    public void blockBank(String bankId) {
+        BankAccount bank = bankAccountRepository.findById(bankId)
+                .orElseThrow(() -> new RuntimeException("Nieznany bank: " + bankId));
+        bank.setBlocked(true);
+        bank.setBlockedAt(java.time.LocalDateTime.now());
+        bankAccountRepository.save(bank);
+        log.info("Bank {} zablokowany", bankId);
     }
 
-    public void unblockBank(String bank) {
-        blockedBanks.put(bank, false);
+    @Transactional
+    public void unblockBank(String bankId) {
+        BankAccount bank = bankAccountRepository.findById(bankId)
+                .orElseThrow(() -> new RuntimeException("Nieznany bank: " + bankId));
+        bank.setBlocked(false);
+        bank.setBlockedAt(null);
+        bank.setOverlimitSince(null);
+        bankAccountRepository.save(bank);
+        log.info("Bank {} odblokowany", bankId);
     }
 
-    public void topUp(String bank, Double amount) {
-
-        balances.put(bank, balances.getOrDefault(bank, 0.0) + amount);
-
-        double balance = balances.get(bank);
-        double limit = debtLimits.getOrDefault(bank, -1000.0);
-
-        if (balance >= limit) {
-            blockedBanks.put(bank, false);
+    @Transactional
+    public void topUp(String bankId, Double amount) {
+        BankAccount bank = bankAccountRepository.findById(bankId)
+                .orElseThrow(() -> new RuntimeException("Nieznany bank: " + bankId));
+        bank.setBalance(bank.getBalance() + amount);
+        
+        // Jeśli saldo wróciło powyżej limitu, odblokuj
+        if (bank.getBalance() >= -bank.getDebtLimit()) {
+            bank.setBlocked(false);
+            bank.setOverlimitSince(null);
+            bank.setBlockedAt(null);
+            log.info("Bank {} automatycznie odblokowany po top-up", bankId);
         }
+        bankAccountRepository.save(bank);
+        log.info("Top-up banku {} o kwotę {}, nowe saldo: {}", bankId, amount, bank.getBalance());
     }
 
     public Map<String, Double> getBalances() {
-        return balances;
+        List<BankAccount> accounts = bankAccountRepository.findAll();
+        return accounts.stream()
+                .collect(Collectors.toMap(
+                        BankAccount::getBankId,
+                        BankAccount::getBalance
+                ));
     }
 
     public Map<String, Boolean> getBlockedBanks() {
-        return blockedBanks;
+        List<BankAccount> accounts = bankAccountRepository.findAll();
+        return accounts.stream()
+                .collect(Collectors.toMap(
+                        BankAccount::getBankId,
+                        BankAccount::isBlocked
+                ));
     }
 }

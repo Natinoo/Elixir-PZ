@@ -18,7 +18,8 @@ import java.math.BigDecimal;
         "senderAccount",
         "receiverAccount",
         "amount",
-        "settledAt"
+        "settledAt",
+        "type"
 })
 public class SorbnetPaymentResponseDto {
 
@@ -31,10 +32,29 @@ public class SorbnetPaymentResponseDto {
     private String receiverAccount;
     private BigDecimal amount;
     private String settledAt;
+    private String type;  // np. "SORBNET", "EXPRESS", "STANDARD"
 
     public SorbnetPaymentResponseDto() {
     }
 
+    // Główny konstruktor
+    public SorbnetPaymentResponseDto(String paymentId, String status, String message,
+                                     String senderBankId, String receiverBankId,
+                                     String senderAccount, String receiverAccount,
+                                     BigDecimal amount, String settledAt, String type) {
+        this.paymentId = paymentId;
+        this.status = status;
+        this.message = message;
+        this.senderBankId = senderBankId;
+        this.receiverBankId = receiverBankId;
+        this.senderAccount = senderAccount;
+        this.receiverAccount = receiverAccount;
+        this.amount = amount;
+        this.settledAt = settledAt;
+        this.type = type;
+    }
+
+    // Gettery i settery
     public String getPaymentId() {
         return paymentId;
     }
@@ -105,5 +125,13 @@ public class SorbnetPaymentResponseDto {
 
     public void setSettledAt(String settledAt) {
         this.settledAt = settledAt;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
     }
 }

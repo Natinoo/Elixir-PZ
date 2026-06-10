@@ -51,6 +51,9 @@ public class Payment implements Persistable<String> {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "type")
+    private String type;  // np. "STANDARD", "EXPRESS", "SORBNET"
+
     @Transient
     private boolean isNew = true;
 
@@ -67,7 +70,8 @@ public class Payment implements Persistable<String> {
         String currency,
         String title,
         PaymentStatus status,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String type
     ) {
         this.paymentId = paymentId;
         this.senderBankId = senderBankId;
@@ -79,6 +83,7 @@ public class Payment implements Persistable<String> {
         this.title = title;
         this.status = status;
         this.createdAt = createdAt;
+        this.type = type;
         this.isNew = true;
     }
 
@@ -111,6 +116,7 @@ public class Payment implements Persistable<String> {
         return isNew;
     }
 
+    // Gettery i settery
     public String getPaymentId() {
         return paymentId;
     }
@@ -136,7 +142,7 @@ public class Payment implements Persistable<String> {
     }
 
     public String getSenderBankId() {
-    return senderBankId;
+        return senderBankId;
     }
 
     public void setSenderBankId(String senderBankId) {
@@ -189,5 +195,13 @@ public class Payment implements Persistable<String> {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
     }
 }

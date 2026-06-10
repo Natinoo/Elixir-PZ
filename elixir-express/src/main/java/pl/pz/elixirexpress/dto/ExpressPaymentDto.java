@@ -15,7 +15,8 @@ import jakarta.xml.bind.annotation.XmlType;
         "receiverAccount",
         "title",
         "senderBankId",
-        "receiverBankId" 
+        "receiverBankId",
+        "type"
 })
 public class ExpressPaymentDto {
 
@@ -27,6 +28,7 @@ public class ExpressPaymentDto {
     private String title;
     private String senderBankId;   
     private String receiverBankId;
+    private String type;  
 
     public ExpressPaymentDto() {
     }
@@ -78,9 +80,11 @@ public class ExpressPaymentDto {
     public void setTitle(String title) {
         this.title = title;
     }
+
     public String getSenderBankId() { 
         return senderBankId; 
     }
+
     public void setSenderBankId(String senderBankId) { 
         this.senderBankId = senderBankId; 
     }
@@ -88,7 +92,16 @@ public class ExpressPaymentDto {
     public String getReceiverBankId() { 
         return receiverBankId; 
     }
+
     public void setReceiverBankId(String receiverBankId) { 
         this.receiverBankId = receiverBankId; 
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
     }
 }

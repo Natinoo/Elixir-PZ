@@ -61,6 +61,7 @@ services:
           mkdir -p /var/ybinit
           echo "CREATE DATABASE sorbnet;" > /var/ybinit/01-db.sql
           echo "CREATE DATABASE elixir;" > /var/ybinit/02-db.sql
+          echo "CREATE DATABASE express;" > /var/ybinit/03-db.sql
           bin/yugabyted start --daemon=false --initial_scripts_dir=/var/ybinit
           '
     healthcheck:
@@ -98,6 +99,9 @@ services:
         condition: service_completed_successfully
     environment:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_DATASOURCE_URL: jdbc:postgresql://yugabyte:5433/express
+      SPRING_DATASOURCE_USERNAME: yugabyte
+      SPRING_DATASOURCE_PASSWORD: yugabyte
 
   sorbnet_system:
     build: ./sorbnet

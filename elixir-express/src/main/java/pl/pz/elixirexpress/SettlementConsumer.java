@@ -55,7 +55,7 @@ public class SettlementConsumer {
                 return PaymentStatus.PROCESSED;
             case "REJECTED":
                 return PaymentStatus.REJECTED;
-            case "BLOCKED":
+            case "BLOCKED", "GRIDLOCK_HELD":
                 return PaymentStatus.BLOCKED;
             default:
                 log.warn("Unknown status: {}, defaulting to QUEUED", sorbnetStatus);

@@ -42,6 +42,9 @@ public class ElixirPaymentService {
         log.info("processPayment called: senderAccount={}, receiverAccount={}, amount={}",
                 paymentDto.getSenderAccount(), paymentDto.getReceiverAccount(), paymentDto.getAmount());
 
+        // Ustawienie typu przelewu (dla rozróżnienia w bazie i w konsumentach)
+        paymentDto.setType("ELIXIR");
+
         // Uzupełnienie pól bankId na podstawie konta (jeśli brak)
         if (paymentDto.getSenderBankId() == null || paymentDto.getSenderBankId().isBlank()) {
             paymentDto.setSenderBankId(paymentDto.getSenderAccount());
@@ -76,7 +79,8 @@ public class ElixirPaymentService {
                 paymentDto.getCurrency(),
                 paymentDto.getTitle(),
                 PaymentStatus.QUEUED,
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                "ELIXIR"  // typ przelewu
         );
         paymentRepository.save(payment);
         log.info("Payment saved to DB, id={}", payment.getPaymentId());

@@ -18,7 +18,8 @@ import jakarta.validation.constraints.Positive;
         "receiverBankId",
         "senderAccount",
         "receiverAccount",
-        "title"
+        "title",
+        "type"
 })
 public class ElixirPaymentDto {
 
@@ -46,20 +47,23 @@ public class ElixirPaymentDto {
     @NotBlank(message = "Tytuł jest wymagany")
     private String title;
 
+    private String type;  
+
     public ElixirPaymentDto() {
     }
 
     public ElixirPaymentDto(String paymentId, Double amount, String currency, String senderBankId,
-                        String receiverBankId, String senderAccount, String receiverAccount, String title) {
-    this.paymentId = paymentId;
-    this.amount = amount;
-    this.currency = currency;
-    this.senderBankId = senderBankId;
-    this.receiverBankId = receiverBankId;
-    this.senderAccount = senderAccount;
-    this.receiverAccount = receiverAccount;
-    this.title = title;
-}
+                        String receiverBankId, String senderAccount, String receiverAccount, String title, String type) {
+        this.paymentId = paymentId;
+        this.amount = amount;
+        this.currency = currency;
+        this.senderBankId = senderBankId;
+        this.receiverBankId = receiverBankId;
+        this.senderAccount = senderAccount;
+        this.receiverAccount = receiverAccount;
+        this.title = title;
+        this.type = type;
+    }
 
     public String getPaymentId() {
         return paymentId;
@@ -108,8 +112,9 @@ public class ElixirPaymentDto {
     public void setTitle(String title) {
         this.title = title;
     }
+
     public String getSenderBankId() {
-    return senderBankId;
+        return senderBankId;
     }
 
     public void setSenderBankId(String senderBankId) {
@@ -122,5 +127,13 @@ public class ElixirPaymentDto {
 
     public void setReceiverBankId(String receiverBankId) {
         this.receiverBankId = receiverBankId;
-}
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
 }

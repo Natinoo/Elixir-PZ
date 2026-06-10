@@ -29,6 +29,9 @@ public class Payment {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Column(name = "type")
+    private String type;  
+
     public Payment() {
         this.createdAt = LocalDateTime.now();
         this.paymentId = UUID.randomUUID().toString();
@@ -73,4 +76,7 @@ public class Payment {
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
 }

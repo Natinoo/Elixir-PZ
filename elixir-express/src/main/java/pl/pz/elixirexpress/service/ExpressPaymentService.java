@@ -48,6 +48,9 @@ public class ExpressPaymentService {
             log.info("Generated new paymentId: {}", paymentDto.getPaymentId());
         }
 
+        // Ustawienie typu przelewu (dla rozróżnienia w bazie i w konsumentach)
+        paymentDto.setType("EXPRESS");
+
         // Zapamiętaj oryginalne identyfikatory banków (BANK_A, BANK_B, BANK_C)
         String originalSender = paymentDto.getSenderAccount();
         String originalReceiver = paymentDto.getReceiverAccount();
@@ -77,6 +80,7 @@ public class ExpressPaymentService {
         payment.setStatus(PaymentStatus.QUEUED);
         payment.setSenderBankId(paymentDto.getSenderBankId());
         payment.setReceiverBankId(paymentDto.getReceiverBankId());
+        payment.setType("EXPRESS"); 
 
         paymentRepository.save(payment);
         log.info("Payment saved to DB: {}", paymentDto.getPaymentId());
