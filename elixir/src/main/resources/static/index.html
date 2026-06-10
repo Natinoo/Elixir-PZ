@@ -65,7 +65,7 @@
 
     <div class="card">
       <div class="row-between">
-        <h2>📋 Historia przelewów</h2>
+        <h2>📋 Historia przelewów ELIXIR</h2>
         <div class="filters">
           <button type="button" onclick="loadPayments()">Wszystkie</button>
           <button type="button" onclick="loadPaymentsByStatus('QUEUED')">QUEUED</button>
@@ -77,17 +77,17 @@
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>ID</th><th>Nadawca</th><th>Odbiorca</th><th>Kwota</th><th>Waluta</th><th>Tytuł</th><th>Status</th><th>Data</th></tr>
+            <tr><th>ID</th><th>Nadawca</th><th>Odbiorca</th><th>Kwota</th><th>Waluta</th><th>Tytuł</th><th>Status</th><th>Typ</th><th>Data</th></tr>
           </thead>
           <tbody id="payments-body">
-            <tr><td colspan="8">Ładowanie...</td></tr>
+            <tr><td colspan="9">Ładowanie...</td></tr>
           </tbody>
         </table>
       </div>
     </div>
   </section>
 
-  <!-- Pracownik banku tab -->
+  <!-- Pracownik banku tab (bez zmian) -->
   <section id="worker-tab" class="tab-content">
     <div class="card">
       <div class="row-between">
@@ -172,7 +172,10 @@
     if (!amountRaw || isNaN(Number(amountRaw)) || Number(amountRaw) <= 0) { msg.textContent = "Kwota musi być większa od zera."; return; }
     if (!currency) { msg.textContent = "Wybierz walutę."; return; }
     if (!title) { msg.textContent = "Podaj tytuł przelewu."; return; }
-    const payloadXml = `<Payment><amount>${Number(amountRaw).toFixed(2)}</amount><currency>${escapeXml(currency)}</currency><senderAccount>${escapeXml(senderAccount)}</senderAccount><receiverAccount>${escapeXml(receiverAccount)}</receiverAccount><title>${escapeXml(title)}</title></Payment>`.trim();
+    
+    // Dodanie pola type="ELIXIR" do wysyłanego XML
+    const payloadXml = `<Payment><amount>${Number(amountRaw).toFixed(2)}</amount><currency>${escapeXml(currency)}</currency><senderAccount>${escapeXml(senderAccount)}</senderAccount><receiverAccount>${escapeXml(receiverAccount)}</receiverAccount><title>${escapeXml(title)}</title><type>ELIXIR</type></Payment>`.trim();
+    
     msg.textContent = "Wysyłanie...";
     try {
       const response = await fetch(`${API}/api/elixir/payments`, {
@@ -194,19 +197,71 @@
     }
   });
 
-  // Helper XML (tylko do odpowiedzi POST)
+  // Helper XML
   function parseXml(text) { return new DOMParser().parseFromString(text || "", "application/xml"); }
   function getFirstTagText(xml, tagName) { const el = xml.getElementsByTagName(tagName)[0]; return el ? el.textContent : ""; }
   function escapeXml(value) { return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;"); }
 
-  // JSON dla historii
-  async function fetchJSON(url) {
+  // JSON dla historii (z filtrowaniem po typie ELIXIR)
+  async function fetchPaymentsByType(url) {
     const response = await fetch(url, { headers: { "Accept": "application/json" } });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.json();
+    const allPayments = await response.json();
+    // Filtruj tylko przelewy typu ELIXIR
+    return allPayments.filter(p => p.type === "ELIXIR");
   }
 
-  // XML dla liquidity, blocked, raportów
+  async function fetchPaymentsByStatusAndType(url, status) {
+    const response = await fetch(`${url}/${status}`, { headers: { "Accept": "application/json" } });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const allPayments = await response.json();
+    return allPayments.filter(p => p.type === "ELIXIR");
+  }
+
+  async function loadPayments() {
+    const tbody = document.getElementById("payments-body");
+    tbody.innerHTML = "<tr><td colspan='9'>Ładowanie...</td></tr>";
+    try {
+      const data = await fetchPaymentsByType(`${API}/api/elixir/history`);
+      renderPayments(data);
+    } catch (err) {
+      tbody.innerHTML = "<tr><td colspan='9'>Błąd pobierania przelewów</td></tr>";
+    }
+  }
+
+  async function loadPaymentsByStatus(status) {
+    const tbody = document.getElementById("payments-body");
+    tbody.innerHTML = "<tr><td colspan='9'>Ładowanie...</td></tr>";
+    try {
+      const data = await fetchPaymentsByStatusAndType(`${API}/api/elixir/history/status`, status);
+      renderPayments(data);
+    } catch (err) {
+      tbody.innerHTML = "<tr><td colspan='9'>Błąd pobierania przelewów</td></tr>";
+    }
+  }
+
+  function renderPayments(data) {
+    const tbody = document.getElementById("payments-body");
+    if (!Array.isArray(data) || data.length === 0) {
+      tbody.innerHTML = "<tr><td colspan='9'>Brak danych (brak przelewów ELIXIR)</td></tr>";
+      return;
+    }
+    tbody.innerHTML = data.map(p => `
+      <tr>
+        <td>${p.paymentId || "-"}</td>
+        <td>${p.senderAccount || "-"}</td>
+        <td>${p.receiverAccount || "-"}</td>
+        <td>${formatMoney(p.amount, p.currency)}</td>
+        <td>${p.currency || "PLN"}</td>
+        <td>${p.title || "-"}</td>
+        <td><span class="status ${String(p.status || '').toLowerCase()}">${p.status || "-"}</span></td>
+        <td><span class="type-badge">${p.type || "ELIXIR"}</span></td>
+        <td>${formatDate(p.createdAt)}</td>
+      </tr>
+    `).join("");
+  }
+
+  // XML dla liquidity, blocked, raportów (bez zmian)
   async function fetchXml(url) {
     const response = await fetch(url, { headers: { "Accept": "application/xml, text/xml, */*" } });
     const text = await response.text();
@@ -241,48 +296,6 @@
     return { sessionName: getFirstTagText(xml, "sessionName"), closedAt: getFirstTagText(xml, "closedAt"), nettingResult: nettingItems };
   }
 
-  async function loadPayments() {
-    const tbody = document.getElementById("payments-body");
-    tbody.innerHTML = "<tr><td colspan='8'>Ładowanie...</td></tr>";
-    try {
-      const data = await fetchJSON(`${API}/api/elixir/history`);
-      renderPayments(data);
-    } catch (err) {
-      tbody.innerHTML = "<tr><td colspan='8'>Błąd pobierania przelewów</td></tr>";
-    }
-  }
-
-  async function loadPaymentsByStatus(status) {
-    const tbody = document.getElementById("payments-body");
-    tbody.innerHTML = "<tr><td colspan='8'>Ładowanie...</td></tr>";
-    try {
-      const data = await fetchJSON(`${API}/api/elixir/history/status/${status}`);
-      renderPayments(data);
-    } catch (err) {
-      tbody.innerHTML = "<tr><td colspan='8'>Błąd pobierania przelewów</td></tr>";
-    }
-  }
-
-  function renderPayments(data) {
-    const tbody = document.getElementById("payments-body");
-    if (!Array.isArray(data) || data.length === 0) {
-      tbody.innerHTML = "<tr><td colspan='8'>Brak danych</td></tr>";
-      return;
-    }
-    tbody.innerHTML = data.map(p => `
-      <tr>
-        <td>${p.paymentId || "-"}</td>
-        <td>${p.senderAccount || "-"}</td>
-        <td>${p.receiverAccount || "-"}</td>
-        <td>${formatMoney(p.amount, p.currency)}</td>
-        <td>${p.currency || "PLN"}</td>
-        <td>${p.title || "-"}</td>
-        <td><span class="status ${String(p.status || '').toLowerCase()}">${p.status || "-"}</span></td>
-        <td>${formatDate(p.createdAt)}</td>
-      </tr>
-    `).join("");
-  }
-
   async function refreshWorkerView() {
     const bank = document.getElementById("selectedBank").value;
     const limit = BANK_LIMITS[bank] ?? -1000;
@@ -303,7 +316,7 @@
       const alertBox = document.getElementById("bank-alert");
       if (balance < limit || isBlocked) {
         alertBox.classList.remove("hidden");
-        alertBox.innerHTML = `<strong>Uwaga:</strong> Bank ${bank} przekroczył limit zadłużenia lub został zablokowany. Przed zamknięciem sesji należy uzupełnić środki.`;
+        alertBox.innerHTML = `<strong>Uwaga:</strong> Bank ${bank} przekroczył limit zadłużenia lub został zablokowany.`;
         openPopup(bank, balance, limit, isBlocked);
       } else {
         alertBox.classList.add("hidden");

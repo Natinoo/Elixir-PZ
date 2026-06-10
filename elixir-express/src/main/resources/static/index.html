@@ -21,14 +21,14 @@
         <div class="header">
           <div>
             <h1>Panel testowy Elixir Express</h1>
-            <p class="subtitle">Szybkie przelewy bez sesji, z natychmiastowym statusem i historią testów</p>
+            <p class="subtitle">Szybkie przelewy express — natychmiastowe rozliczenie przez SORBNET</p>
           </div>
         </div>
 
         <section id="payments" class="tab-content active">
           <div class="stats">
             <div class="stat">
-              <span class="label">Wszystkie</span>
+              <span class="label">Wszystkie Express</span>
               <strong id="allCount">0</strong>
             </div>
             <div class="stat">
@@ -79,8 +79,8 @@
           <div class="card table-card">
             <div class="row-between" style="padding: 20px 20px 8px;">
               <div>
-                <h2 style="margin-bottom: 6px;">Historia przelewów express</h2>
-                <p class="subtitle">Dane pobierane z backendu Elixir Express</p>
+                <h2 style="margin-bottom: 6px;">Historia przelewów EXPRESS</h2>
+                <p class="subtitle">Tylko przelewy wykonane kanałem Express</p>
               </div>
               <div class="filter-tabs">
                 <button class="tab active" data-filter="ALL">Wszystkie</button>
@@ -93,9 +93,11 @@
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>ID</th><th>Nadawca</th><th>Odbiorca</th><th>Kwota</th><th>Waluta</th><th>Tytuł</th><th>Status</th><th>Data</th></tr>
+                  <tr><th>ID</th><th>Nadawca</th><th>Odbiorca</th><th>Kwota</th><th>Waluta</th><th>Tytuł</th><th>Status</th><th>Typ</th><th>Data</th></tr>
                 </thead>
-                <tbody id="paymentsTableBody"><tr><td colspan="8">Ładowanie...</td></tr></tbody>
+                <tbody id="paymentsTableBody">
+                  <tr><td colspan="9">Ładowanie...</td></tr>
+                </tbody>
               </table>
             </div>
           </div>
@@ -113,7 +115,7 @@
   </div>
 
   <script>
-    const API_BASE = ''; // puste, bo serwowane z tego samego serwera
+    const API_BASE = '';
     let selectedStatus = 'ALL';
 
     const sideTabs = document.querySelectorAll('.side-nav .tab');
@@ -157,21 +159,40 @@
       }
     }
 
+    // Funkcja do parsowania XML odpowiedzi
+    function parseXmlResponse(xmlString) {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+      const paymentId = xmlDoc.getElementsByTagName("paymentId")[0]?.textContent || "";
+      const status = xmlDoc.getElementsByTagName("status")[0]?.textContent || "";
+      return { paymentId, status };
+    }
+
     async function loadPayments() {
       const tbody = document.getElementById('paymentsTableBody');
-      tbody.innerHTML = '<tr><td colspan="8">Ładowanie...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9">Ładowanie...</td></tr>';
+      
       try {
-        const url = selectedStatus === 'ALL'
-          ? `${API_BASE}/api/express/payments`
-          : `${API_BASE}/api/express/payments/status/${selectedStatus}`;
+        let url;
+        if (selectedStatus === 'ALL') {
+          url = `${API_BASE}/api/express/payments`;
+        } else {
+          url = `${API_BASE}/api/express/payments/status/${selectedStatus}`;
+        }
+        
         const response = await fetch(url);
-        const data = await response.json();
-        if (!Array.isArray(data) || data.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="8">Brak danych</td></tr>';
+        const allPayments = await response.json();
+        
+        // Filtrowanie tylko przelewów typu EXPRESS
+        const data = Array.isArray(allPayments) ? allPayments.filter(p => p.type === 'EXPRESS') : [];
+        
+        if (data.length === 0) {
+          tbody.innerHTML = '<td><td colspan="9">Brak danych (brak przelewów EXPRESS)</td></tr>';
           updateStats([]);
-          updateDebug({ endpoint: url, result: [] });
+          updateDebug({ endpoint: url, resultCount: 0, message: 'No EXPRESS payments found' });
           return;
         }
+        
         tbody.innerHTML = data.map(payment => `
           <tr>
             <td>${payment.paymentId || '-'}</td>
@@ -181,13 +202,16 @@
             <td>${payment.currency || 'PLN'}</td>
             <td>${payment.title || '-'}</td>
             <td><span class="status ${statusClass(payment.status)}">${payment.status || '-'}</span></td>
+            <td><span class="type-badge">${payment.type || 'EXPRESS'}</span></td>
             <td>${payment.createdAt || '-'}</td>
           </tr>
         `).join('');
+        
         updateStats(data);
         updateDebug({ endpoint: url, resultCount: data.length, sample: data.slice(0, 3) });
       } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="8">Błąd ładowania danych</td></tr>';
+        console.error('Error loading payments:', e);
+        tbody.innerHTML = `<tr><td colspan="9">Błąd ładowania danych: ${e.message}</td></tr>`;
         updateDebug({ error: 'Błąd pobierania płatności', details: String(e) });
       }
     }
@@ -202,33 +226,60 @@
     }
 
     async function sendPayment() {
-      const payload = {
-        senderAccount: document.getElementById('senderAccount').value,
-        receiverAccount: document.getElementById('receiverAccount').value,
-        amount: Number(document.getElementById('amount').value),
-        currency: document.getElementById('currency').value || 'PLN',
-        title: document.getElementById('title').value
-      };
+      const senderAccount = document.getElementById('senderAccount').value;
+      const receiverAccount = document.getElementById('receiverAccount').value;
+      const amount = Number(document.getElementById('amount').value);
+      const currency = document.getElementById('currency').value || 'PLN';
+      const title = document.getElementById('title').value;
+      
       const message = document.getElementById('paymentMessage');
+      
+      if (!senderAccount || !receiverAccount || !amount || amount <= 0 || !title) {
+        message.className = 'message error';
+        message.textContent = '❌ Wypełnij wszystkie pola poprawnie';
+        return;
+      }
+      
+      // Budowanie XML
+      const payloadXml = `<?xml version="1.0" encoding="UTF-8"?>
+<Payment>
+    <amount>${amount.toFixed(2)}</amount>
+    <currency>${currency}</currency>
+    <senderAccount>${senderAccount}</senderAccount>
+    <receiverAccount>${receiverAccount}</receiverAccount>
+    <title>${title}</title>
+    <senderBankId>${senderAccount}</senderBankId>
+    <receiverBankId>${receiverAccount}</receiverBankId>
+    <type>EXPRESS</type>
+</Payment>`;
+      
       message.className = 'message';
       message.textContent = 'Wysyłanie...';
+      
       try {
         const response = await fetch(`${API_BASE}/api/express/payments`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          headers: { 'Content-Type': 'application/xml', 'Accept': 'application/xml' },
+          body: payloadXml
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
+        
+        const responseText = await response.text();
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${responseText}`);
+        }
+        
+        const { paymentId, status } = parseXmlResponse(responseText);
         message.className = 'message ok';
-        message.textContent = `OK: ${data.paymentId || 'wysłano'} (${data.status || 'PROCESSED'})`;
+        message.textContent = `✅ OK: ${paymentId || 'wysłano'} (${status || 'QUEUED'}) - Express`;
+        
         document.getElementById('amount').value = '';
         document.getElementById('title').value = '';
         await loadPayments();
       } catch (e) {
         message.className = 'message error';
-        message.textContent = 'Błąd wysyłki przelewu';
-        updateDebug({ error: 'Błąd wysyłki przelewu', details: String(e), payload });
+        message.textContent = `❌ Błąd wysyłki: ${e.message}`;
+        updateDebug({ error: 'Błąd wysyłki przelewu', details: String(e), payload: payloadXml });
       }
     }
 
