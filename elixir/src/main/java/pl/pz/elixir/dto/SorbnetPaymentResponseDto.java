@@ -2,136 +2,197 @@ package pl.pz.elixir.dto;
 
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
+import jakarta.xml.bind.annotation.XmlAttribute;
+import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
-import jakarta.xml.bind.annotation.XmlType;
+import jakarta.xml.bind.annotation.XmlValue;
 
 import java.math.BigDecimal;
 
-@XmlRootElement(name = "SorbnetPaymentResponse")
+@XmlRootElement(name = "Document")
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(propOrder = {
-        "paymentId",
-        "status",
-        "message",
-        "senderBankId",
-        "receiverBankId",
-        "senderAccount",
-        "receiverAccount",
-        "amount",
-        "settledAt",
-        "type"
-})
 public class SorbnetPaymentResponseDto {
 
-    private String paymentId;
-    private String status;
-    private String message;
-    private String senderBankId;
-    private String receiverBankId;
-    private String senderAccount;
-    private String receiverAccount;
-    private BigDecimal amount;
-    private String settledAt;
-    private String type;  // np. "SORBNET", "EXPRESS", "STANDARD"
+    @XmlElement(name = "CstmrPmtStsRpt")
+    private CustomerPaymentStatusReport report = new CustomerPaymentStatusReport();
 
     public SorbnetPaymentResponseDto() {
     }
 
-    // Główny konstruktor
-    public SorbnetPaymentResponseDto(String paymentId, String status, String message,
-                                     String senderBankId, String receiverBankId,
-                                     String senderAccount, String receiverAccount,
-                                     BigDecimal amount, String settledAt, String type) {
-        this.paymentId = paymentId;
-        this.status = status;
-        this.message = message;
-        this.senderBankId = senderBankId;
-        this.receiverBankId = receiverBankId;
-        this.senderAccount = senderAccount;
-        this.receiverAccount = receiverAccount;
-        this.amount = amount;
-        this.settledAt = settledAt;
-        this.type = type;
-    }
-
-    // Gettery i settery
     public String getPaymentId() {
-        return paymentId;
-    }
-
-    public void setPaymentId(String paymentId) {
-        this.paymentId = paymentId;
+        TransactionInformationAndStatus tx = tx();
+        if (tx.orgnlTxId != null && !tx.orgnlTxId.isBlank()) {
+            return tx.orgnlTxId;
+        }
+        return tx.orgnlInstrId;
     }
 
     public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
+        return tx().txSts;
     }
 
     public String getMessage() {
-        return message;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
+        return tx().stsRsnInf.addtlInf;
     }
 
     public String getSenderBankId() {
-        return senderBankId;
-    }
-
-    public void setSenderBankId(String senderBankId) {
-        this.senderBankId = senderBankId;
+        return tx().orgnlTxRef.dbtrAgt.finInstnId.bicfi;
     }
 
     public String getReceiverBankId() {
-        return receiverBankId;
-    }
-
-    public void setReceiverBankId(String receiverBankId) {
-        this.receiverBankId = receiverBankId;
+        return tx().orgnlTxRef.cdtrAgt.finInstnId.bicfi;
     }
 
     public String getSenderAccount() {
-        return senderAccount;
-    }
-
-    public void setSenderAccount(String senderAccount) {
-        this.senderAccount = senderAccount;
+        return tx().orgnlTxRef.dbtrAcct.id.iban;
     }
 
     public String getReceiverAccount() {
-        return receiverAccount;
-    }
-
-    public void setReceiverAccount(String receiverAccount) {
-        this.receiverAccount = receiverAccount;
+        return tx().orgnlTxRef.cdtrAcct.id.iban;
     }
 
     public BigDecimal getAmount() {
-        return amount;
-    }
-
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
+        return tx().orgnlTxRef.intrBkSttlmAmt == null ? null : tx().orgnlTxRef.intrBkSttlmAmt.value;
     }
 
     public String getSettledAt() {
-        return settledAt;
-    }
-
-    public void setSettledAt(String settledAt) {
-        this.settledAt = settledAt;
+        return tx().settledAt;
     }
 
     public String getType() {
-        return type;
+        return tx().orgnlTxRef.splmtryData.envlp.sourceServiceCode;
     }
 
-    public void setType(String type) {
-        this.type = type;
+    private TransactionInformationAndStatus tx() {
+        if (report == null) {
+            report = new CustomerPaymentStatusReport();
+        }
+        if (report.orgnlPmtInfAndSts == null) {
+            report.orgnlPmtInfAndSts = new OriginalPaymentInformationAndStatus();
+        }
+        if (report.orgnlPmtInfAndSts.txInfAndSts == null) {
+            report.orgnlPmtInfAndSts.txInfAndSts = new TransactionInformationAndStatus();
+        }
+        return report.orgnlPmtInfAndSts.txInfAndSts;
+    }
+
+    @XmlAccessorType(XmlAccessType.FIELD)
+    public static class CustomerPaymentStatusReport {
+        @XmlElement(name = "GrpHdr")
+        private GroupHeader grpHdr = new GroupHeader();
+
+        @XmlElement(name = "OrgnlPmtInfAndSts")
+        private OriginalPaymentInformationAndStatus orgnlPmtInfAndSts = new OriginalPaymentInformationAndStatus();
+    }
+
+    @XmlAccessorType(XmlAccessType.FIELD)
+    public static class GroupHeader {
+        @XmlElement(name = "MsgId")
+        private String msgId;
+
+        @XmlElement(name = "CreDtTm")
+        private String creDtTm;
+    }
+
+    @XmlAccessorType(XmlAccessType.FIELD)
+    public static class OriginalPaymentInformationAndStatus {
+        @XmlElement(name = "OrgnlPmtInfId")
+        private String orgnlPmtInfId;
+
+        @XmlElement(name = "TxInfAndSts")
+        private TransactionInformationAndStatus txInfAndSts = new TransactionInformationAndStatus();
+    }
+
+    @XmlAccessorType(XmlAccessType.FIELD)
+    public static class TransactionInformationAndStatus {
+        @XmlElement(name = "OrgnlInstrId")
+        private String orgnlInstrId;
+
+        @XmlElement(name = "OrgnlTxId")
+        private String orgnlTxId;
+
+        @XmlElement(name = "TxSts")
+        private String txSts;
+
+        @XmlElement(name = "StsRsnInf")
+        private StatusReasonInformation stsRsnInf = new StatusReasonInformation();
+
+        @XmlElement(name = "OrgnlTxRef")
+        private OriginalTransactionReference orgnlTxRef = new OriginalTransactionReference();
+
+        @XmlElement(name = "SettledAt")
+        private String settledAt;
+    }
+
+    @XmlAccessorType(XmlAccessType.FIELD)
+    public static class StatusReasonInformation {
+        @XmlElement(name = "AddtlInf")
+        private String addtlInf;
+    }
+
+    @XmlAccessorType(XmlAccessType.FIELD)
+    public static class OriginalTransactionReference {
+        @XmlElement(name = "IntrBkSttlmAmt")
+        private ActiveCurrencyAndAmount intrBkSttlmAmt = new ActiveCurrencyAndAmount();
+
+        @XmlElement(name = "DbtrAgt")
+        private BranchAndFinancialInstitutionIdentification dbtrAgt = new BranchAndFinancialInstitutionIdentification();
+
+        @XmlElement(name = "CdtrAgt")
+        private BranchAndFinancialInstitutionIdentification cdtrAgt = new BranchAndFinancialInstitutionIdentification();
+
+        @XmlElement(name = "DbtrAcct")
+        private CashAccount dbtrAcct = new CashAccount();
+
+        @XmlElement(name = "CdtrAcct")
+        private CashAccount cdtrAcct = new CashAccount();
+
+        @XmlElement(name = "SplmtryData")
+        private SupplementaryData splmtryData = new SupplementaryData();
+    }
+
+    @XmlAccessorType(XmlAccessType.FIELD)
+    public static class ActiveCurrencyAndAmount {
+        @XmlAttribute(name = "Ccy")
+        private String currency;
+
+        @XmlValue
+        private BigDecimal value;
+    }
+
+    @XmlAccessorType(XmlAccessType.FIELD)
+    public static class BranchAndFinancialInstitutionIdentification {
+        @XmlElement(name = "FinInstnId")
+        private FinancialInstitutionIdentification finInstnId = new FinancialInstitutionIdentification();
+    }
+
+    @XmlAccessorType(XmlAccessType.FIELD)
+    public static class FinancialInstitutionIdentification {
+        @XmlElement(name = "BICFI")
+        private String bicfi;
+    }
+
+    @XmlAccessorType(XmlAccessType.FIELD)
+    public static class CashAccount {
+        @XmlElement(name = "Id")
+        private AccountIdentification id = new AccountIdentification();
+    }
+
+    @XmlAccessorType(XmlAccessType.FIELD)
+    public static class AccountIdentification {
+        @XmlElement(name = "IBAN")
+        private String iban;
+    }
+
+    @XmlAccessorType(XmlAccessType.FIELD)
+    public static class SupplementaryData {
+        @XmlElement(name = "Envlp")
+        private Envelope envlp = new Envelope();
+    }
+
+    @XmlAccessorType(XmlAccessType.FIELD)
+    public static class Envelope {
+        @XmlElement(name = "SourceServiceCode")
+        private String sourceServiceCode;
     }
 }

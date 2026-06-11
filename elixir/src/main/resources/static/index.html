@@ -11,53 +11,96 @@
   <div class="header">
     <div>
       <h1>ELIXIR</h1>
-      <div class="subtitle">System Rozliczeń Międzybankowych — Netting & Gridlock</div>
+      <div class="subtitle">System Rozliczeń Międzybankowych — przelewy klientowskie, sesje, netting i płynność banków</div>
     </div>
     <div class="tabs">
-      <button class="tab active" onclick="showTab('operator')">📤 Operator przelewów</button>
-      <button class="tab" onclick="showTab('worker')">🏦 Pracownik banku</button>
+      <button class="tab active" type="button" onclick="showTab('operator')">📤 Operator przelewów</button>
+      <button class="tab" type="button" onclick="showTab('worker')">🏦 Pracownik banku</button>
     </div>
   </div>
 
   <!-- Operator tab -->
   <section id="operator-tab" class="tab-content active">
     <div class="card">
-      <h2>✍️ Nowy przelew</h2>
+      <div class="row-between">
+        <div>
+          <h2> Nowy przelew klientowski ELIXIR</h2>
+          <p class="hint">
+            Dane osoby i IBAN są danymi przelewu klientowskiego. Płynność i netting są rozliczane na technicznych kontach banków w ELIXIRZE.
+          </p>
+        </div>
+        <span class="type-badge">serviceCode: ELIXIR</span>
+      </div>
+
       <form id="payment-form">
+        <div class="section-title">Nadawca</div>
+        <div class="grid three">
+          <div>
+            <label for="senderName">Imię i nazwisko nadawcy</label>
+            <input type="text" id="senderName" placeholder="Jan Kowalski" maxlength="120" required>
+          </div>
+          <div>
+            <label for="senderBankId">Bank nadawcy</label>
+            <select id="senderBankId" required>
+              <option value="">Wybierz bank</option>
+              <option value="BANK_A">BANK_A</option>
+              <option value="BANK_B">BANK_B</option>
+              <option value="BANK_C">BANK_C</option>
+            </select>
+          </div>
+          <div>
+            <label for="senderAccount">IBAN nadawcy</label>
+            <input type="text" id="senderAccount" placeholder="PL11111100000000000000000001" maxlength="28" required>
+          </div>
+        </div>
+
+        <div class="section-title">Odbiorca</div>
+        <div class="grid three">
+          <div>
+            <label for="receiverName">Imię i nazwisko odbiorcy</label>
+            <input type="text" id="receiverName" placeholder="Anna Nowak" maxlength="120" required>
+          </div>
+          <div>
+            <label for="receiverBankId">Bank odbiorcy</label>
+            <select id="receiverBankId" required>
+              <option value="">Wybierz bank</option>
+              <option value="BANK_A">BANK_A</option>
+              <option value="BANK_B">BANK_B</option>
+              <option value="BANK_C">BANK_C</option>
+            </select>
+          </div>
+          <div>
+            <label for="receiverAccount">IBAN odbiorcy</label>
+            <input type="text" id="receiverAccount" placeholder="PL22222200000000000000000002" maxlength="28" required>
+          </div>
+        </div>
+
+        <div class="section-title">Szczegóły przelewu</div>
         <div class="grid">
           <div>
-            <label>Bank nadawcy</label>
-            <select id="senderAccount" required>
-              <option value="">Wybierz bank</option>
-              <option value="BANK_A">BANK_A</option>
-              <option value="BANK_B">BANK_B</option>
-              <option value="BANK_C">BANK_C</option>
-            </select>
-          </div>
-          <div>
-            <label>Bank odbiorcy</label>
-            <select id="receiverAccount" required>
-              <option value="">Wybierz bank</option>
-              <option value="BANK_A">BANK_A</option>
-              <option value="BANK_B">BANK_B</option>
-              <option value="BANK_C">BANK_C</option>
-            </select>
-          </div>
-          <div>
-            <label>Kwota (PLN)</label>
+            <label for="amount">Kwota (PLN)</label>
             <input type="number" id="amount" step="0.01" min="0.01" placeholder="0.00" required>
           </div>
           <div>
-            <label>Waluta</label>
-            <select id="currency" required><option value="PLN">PLN</option></select>
+            <label for="currency">Waluta</label>
+            <select id="currency" required>
+              <option value="PLN">PLN</option>
+            </select>
           </div>
         </div>
         <div>
-          <label>Tytuł przelewu</label>
+          <label for="title">Tytuł przelewu</label>
           <input type="text" id="title" placeholder="Np. Faktura 123/2025" maxlength="140" required>
         </div>
+
+        <div class="quick-actions">
+          <button type="button" class="secondary" onclick="fillExample('A_TO_B')">Przykład BANK_A → BANK_B</button>
+          <button type="button" class="secondary" onclick="fillExample('B_TO_C')">Przykład BANK_B → BANK_C</button>
+          <button type="button" class="secondary" onclick="fillExample('C_TO_A')">Przykład BANK_C → BANK_A</button>
+        </div>
+
         <div class="form-actions">
-          <button type="submit">🚀 Wyślij przelew</button>
+          <button type="submit"> Wyślij przelew do sesji</button>
         </div>
         <div id="payment-message" class="message"></div>
       </form>
@@ -77,21 +120,37 @@
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>ID</th><th>Nadawca</th><th>Odbiorca</th><th>Kwota</th><th>Waluta</th><th>Tytuł</th><th>Status</th><th>Typ</th><th>Data</th></tr>
+            <tr>
+              <th>ID</th>
+              <th>Nadawca</th>
+              <th>Bank nadawcy</th>
+              <th>IBAN nadawcy</th>
+              <th>Odbiorca</th>
+              <th>Bank odbiorcy</th>
+              <th>IBAN odbiorcy</th>
+              <th>Kwota</th>
+              <th>Tytuł</th>
+              <th>Status</th>
+              <th>Typ</th>
+              <th>Data</th>
+            </tr>
           </thead>
           <tbody id="payments-body">
-            <tr><td colspan="9">Ładowanie...</td></tr>
+            <tr><td colspan="12">Ładowanie...</td></tr>
           </tbody>
         </table>
       </div>
     </div>
   </section>
 
-  <!-- Pracownik banku tab (bez zmian) -->
+  <!-- Pracownik banku tab -->
   <section id="worker-tab" class="tab-content">
     <div class="card">
       <div class="row-between">
-        <h2>🏦 Panel pracownika banku</h2>
+        <div>
+          <h2>🏦 Panel pracownika banku</h2>
+          <p class="hint">Ten panel pokazuje techniczne konto banku w systemie ELIXIR, a nie konto klienta.</p>
+        </div>
         <div class="inline">
           <label for="selectedBank">Bank:</label>
           <select id="selectedBank" onchange="refreshWorkerView()">
@@ -102,19 +161,22 @@
         </div>
       </div>
       <div class="stats">
-        <div class="stat"><span class="label">Stan konta rozrachunkowego</span><strong id="balance-value">-</strong></div>
+        <div class="stat"><span class="label">Stan konta technicznego ELIXIR</span><strong id="balance-value">-</strong></div>
         <div class="stat"><span class="label">Limit zadłużenia</span><strong id="limit-value">-1000.00 PLN</strong></div>
         <div class="stat"><span class="label">Status banku</span><strong id="blocked-value">-</strong></div>
-        <div class="stat"><span class="label">Zobowiązania / wynik sesyjny</span><strong id="bank-report-count">-</strong></div>
+        <div class="stat"><span class="label">Bieżące zobowiązania sesji</span><strong id="bank-report-count">-</strong></div>
       </div>
       <div id="bank-alert" class="alert hidden"></div>
     </div>
 
     <div class="card">
       <h2>⚙️ Akcje awaryjne</h2>
+      <p class="hint">
+        Lokalny top-up zostawiam jako akcję testową. Docelowo przy braku płynności Elixir powinien wysłać request do Sorbnetu, a bank zatwierdza zasilenie w GUI Sorbnetu.
+      </p>
       <div class="topup-box">
         <input type="number" id="topupAmount" step="0.01" placeholder="Kwota top-up">
-        <button type="button" onclick="topUpSelectedBank()">Uzupełnij środki</button>
+        <button type="button" onclick="topUpSelectedBank()">Uzupełnij środki testowo</button>
         <button type="button" class="secondary" onclick="unblockSelectedBank()">Odblokuj bank</button>
       </div>
       <div id="topup-message" class="message"></div>
@@ -134,7 +196,7 @@
 
 <div id="popup-overlay" class="popup-overlay hidden">
   <div class="popup">
-    <h3>⚠️ Alert limitu zadłużenia</h3>
+    <h3>⚠️ Alert płynności</h3>
     <p id="popup-text">Przekroczono limit zadłużenia banku.</p>
     <button type="button" onclick="closePopup()">Rozumiem</button>
   </div>
@@ -143,6 +205,39 @@
 <script>
   const API = "";
   const BANK_LIMITS = { BANK_A: -1000, BANK_B: -1000, BANK_C: -1000 };
+
+  const EXAMPLES = {
+    A_TO_B: {
+      senderName: "Jan Kowalski",
+      senderBankId: "BANK_A",
+      senderAccount: "PL11111100000000000000000001",
+      receiverName: "Anna Nowak",
+      receiverBankId: "BANK_B",
+      receiverAccount: "PL22222200000000000000000002",
+      amount: "1000.00",
+      title: "Przelew klientowski A do B"
+    },
+    B_TO_C: {
+      senderName: "Piotr Zieliński",
+      senderBankId: "BANK_B",
+      senderAccount: "PL22222200000000000000000012",
+      receiverName: "Maria Wiśniewska",
+      receiverBankId: "BANK_C",
+      receiverAccount: "PL33333300000000000000000023",
+      amount: "750.00",
+      title: "Przelew klientowski B do C"
+    },
+    C_TO_A: {
+      senderName: "Katarzyna Wójcik",
+      senderBankId: "BANK_C",
+      senderAccount: "PL33333300000000000000000033",
+      receiverName: "Adam Nowicki",
+      receiverBankId: "BANK_A",
+      receiverAccount: "PL11111100000000000000000044",
+      amount: "500.00",
+      title: "Przelew klientowski C do A"
+    }
+  };
 
   function showTab(name) {
     document.querySelectorAll(".tab").forEach(btn => btn.classList.remove("active"));
@@ -157,116 +252,308 @@
     }
   }
 
+  function fillExample(key) {
+    const data = EXAMPLES[key];
+    if (!data) return;
+    Object.entries(data).forEach(([id, value]) => {
+      const el = document.getElementById(id);
+      if (el) el.value = value;
+    });
+    document.getElementById("currency").value = "PLN";
+    document.getElementById("payment-message").textContent = "Wstawiono przykładowe dane przelewu.";
+  }
+
   document.getElementById("payment-form").addEventListener("submit", async (e) => {
     e.preventDefault();
+
     const msg = document.getElementById("payment-message");
-    const senderAccount = document.getElementById("senderAccount").value.trim();
-    const receiverAccount = document.getElementById("receiverAccount").value.trim();
-    const amountRaw = document.getElementById("amount").value.trim();
-    const currency = document.getElementById("currency").value.trim();
-    const title = document.getElementById("title").value.trim();
+    const senderName = valueOf("senderName");
+    const receiverName = valueOf("receiverName");
+    const senderBankId = valueOf("senderBankId");
+    const receiverBankId = valueOf("receiverBankId");
+    const senderAccount = normalizeIban(valueOf("senderAccount"));
+    const receiverAccount = normalizeIban(valueOf("receiverAccount"));
+    const amountRaw = valueOf("amount");
+    const currency = valueOf("currency");
+    const title = valueOf("title");
+
+    msg.className = "message";
     msg.textContent = "";
-    if (!senderAccount) { msg.textContent = "Wybierz bank nadawcy."; return; }
-    if (!receiverAccount) { msg.textContent = "Wybierz bank odbiorcy."; return; }
-    if (senderAccount === receiverAccount) { msg.textContent = "Bank nadawcy i odbiorcy nie mogą być takie same."; return; }
-    if (!amountRaw || isNaN(Number(amountRaw)) || Number(amountRaw) <= 0) { msg.textContent = "Kwota musi być większa od zera."; return; }
-    if (!currency) { msg.textContent = "Wybierz walutę."; return; }
-    if (!title) { msg.textContent = "Podaj tytuł przelewu."; return; }
-    
-    // Dodanie pola type="ELIXIR" do wysyłanego XML
-    const payloadXml = `<Payment><amount>${Number(amountRaw).toFixed(2)}</amount><currency>${escapeXml(currency)}</currency><senderAccount>${escapeXml(senderAccount)}</senderAccount><receiverAccount>${escapeXml(receiverAccount)}</receiverAccount><title>${escapeXml(title)}</title><type>ELIXIR</type></Payment>`.trim();
-    
-    msg.textContent = "Wysyłanie...";
+
+    const validationError = validatePaymentForm({
+      senderName,
+      receiverName,
+      senderBankId,
+      receiverBankId,
+      senderAccount,
+      receiverAccount,
+      amountRaw,
+      currency,
+      title
+    });
+
+    if (validationError) {
+      msg.classList.add("error");
+      msg.textContent = validationError;
+      return;
+    }
+
+    const payloadXml = buildPaymentXml({
+      senderName,
+      receiverName,
+      senderBankId,
+      receiverBankId,
+      senderAccount,
+      receiverAccount,
+      amount: Number(amountRaw).toFixed(2),
+      currency,
+      title,
+      type: "ELIXIR"
+    });
+
+    msg.textContent = "Wysyłanie przelewu do sesji ELIXIR...";
+
     try {
       const response = await fetch(`${API}/api/elixir/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/xml", "Accept": "application/xml, text/xml, */*" },
         body: payloadXml
       });
+
       const text = await response.text();
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const errorXml = parseXml(text);
+        const errorMessage = getFirstTagText(errorXml, "message") || `HTTP ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
       const xml = parseXml(text);
-      const paymentId = getFirstTagText(xml, "paymentId") || "brak";
-      msg.textContent = `✅ Przelew zapisany. ID: ${paymentId}`;
+      const paymentId =
+        getFirstTagText(xml, "paymentId") ||
+        getFirstTagText(xml, "OrgnlTxId") ||
+        getFirstTagText(xml, "OrgnlInstrId") ||
+        getFirstTagText(xml, "OrgnlPmtInfId") ||
+        "brak";
+      msg.classList.add("success");
+      msg.textContent = `✅ Przelew zapisany do sesji. ID: ${paymentId}`;
+
       document.getElementById("payment-form").reset();
       document.getElementById("currency").value = "PLN";
       await loadPayments();
       await refreshWorkerView();
     } catch (err) {
+      msg.classList.add("error");
       msg.textContent = `❌ Błąd: ${err.message}`;
     }
   });
 
-  // Helper XML
-  function parseXml(text) { return new DOMParser().parseFromString(text || "", "application/xml"); }
-  function getFirstTagText(xml, tagName) { const el = xml.getElementsByTagName(tagName)[0]; return el ? el.textContent : ""; }
-  function escapeXml(value) { return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;"); }
+  function valueOf(id) {
+    return document.getElementById(id).value.trim();
+  }
 
-  // JSON dla historii (z filtrowaniem po typie ELIXIR)
-  async function fetchPaymentsByType(url) {
+  function validatePaymentForm(data) {
+    if (!data.senderName) return "Podaj imię i nazwisko nadawcy.";
+    if (!data.receiverName) return "Podaj imię i nazwisko odbiorcy.";
+    if (!data.senderBankId) return "Wybierz bank nadawcy.";
+    if (!data.receiverBankId) return "Wybierz bank odbiorcy.";
+    if (data.senderBankId === data.receiverBankId) return "Bank nadawcy i odbiorcy nie mogą być takie same.";
+    if (!data.senderAccount) return "Podaj IBAN nadawcy.";
+    if (!data.receiverAccount) return "Podaj IBAN odbiorcy.";
+    if (!isValidSimpleIban(data.senderAccount)) return "IBAN nadawcy powinien mieć format PL + 26 cyfr.";
+    if (!isValidSimpleIban(data.receiverAccount)) return "IBAN odbiorcy powinien mieć format PL + 26 cyfr.";
+    if (data.senderAccount === data.receiverAccount) return "IBAN nadawcy i odbiorcy nie mogą być takie same.";
+    if (!data.amountRaw || isNaN(Number(data.amountRaw)) || Number(data.amountRaw) <= 0) return "Kwota musi być większa od zera.";
+    if (!data.currency) return "Wybierz walutę.";
+    if (data.currency !== "PLN") return "W tej wersji obsługiwana jest tylko waluta PLN.";
+    if (!data.title) return "Podaj tytuł przelewu.";
+    if (data.title.length > 140) return "Tytuł przelewu może mieć maksymalnie 140 znaków.";
+    return null;
+  }
+
+  function buildPaymentXml(payment) {
+    const paymentId = `ELIX-${Date.now()}`;
+    const createdAt = new Date().toISOString().replace("Z", "");
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<Document>
+  <FIToFICstmrCdtTrf>
+    <GrpHdr>
+      <MsgId>${escapeXml(paymentId)}</MsgId>
+      <CreDtTm>${escapeXml(createdAt)}</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <TtlIntrBkSttlmAmt Ccy="${escapeXml(payment.currency)}">${escapeXml(payment.amount)}</TtlIntrBkSttlmAmt>
+      <SttlmInf>
+        <SttlmMtd>CLRG</SttlmMtd>
+        <ClrSys>
+          <Cd>ELIXIR</Cd>
+        </ClrSys>
+      </SttlmInf>
+    </GrpHdr>
+
+    <CdtTrfTxInf>
+      <PmtId>
+        <InstrId>${escapeXml(paymentId)}</InstrId>
+        <EndToEndId>${escapeXml(paymentId)}</EndToEndId>
+        <TxId>${escapeXml(paymentId)}</TxId>
+      </PmtId>
+
+      <IntrBkSttlmAmt Ccy="${escapeXml(payment.currency)}">${escapeXml(payment.amount)}</IntrBkSttlmAmt>
+
+      <Dbtr>
+        <Nm>${escapeXml(payment.senderName)}</Nm>
+      </Dbtr>
+      <DbtrAcct>
+        <Id>
+          <IBAN>${escapeXml(payment.senderAccount)}</IBAN>
+        </Id>
+      </DbtrAcct>
+      <DbtrAgt>
+        <FinInstnId>
+          <BICFI>${escapeXml(payment.senderBankId)}</BICFI>
+        </FinInstnId>
+      </DbtrAgt>
+
+      <Cdtr>
+        <Nm>${escapeXml(payment.receiverName)}</Nm>
+      </Cdtr>
+      <CdtrAcct>
+        <Id>
+          <IBAN>${escapeXml(payment.receiverAccount)}</IBAN>
+        </Id>
+      </CdtrAcct>
+      <CdtrAgt>
+        <FinInstnId>
+          <BICFI>${escapeXml(payment.receiverBankId)}</BICFI>
+        </FinInstnId>
+      </CdtrAgt>
+
+      <RmtInf>
+        <Ustrd>${escapeXml(payment.title)}</Ustrd>
+      </RmtInf>
+
+      <SplmtryData>
+        <Envlp>
+          <ServiceCode>ELIXIR</ServiceCode>
+          <SenderBankId>${escapeXml(payment.senderBankId)}</SenderBankId>
+          <ReceiverBankId>${escapeXml(payment.receiverBankId)}</ReceiverBankId>
+        </Envlp>
+      </SplmtryData>
+    </CdtTrfTxInf>
+  </FIToFICstmrCdtTrf>
+</Document>`.trim();
+  }
+
+  function normalizeIban(value) {
+    return String(value || "").replace(/\s+/g, "").toUpperCase();
+  }
+
+  function isValidSimpleIban(value) {
+    return /^PL\d{26}$/.test(value);
+  }
+
+  function parseXml(text) {
+    return new DOMParser().parseFromString(text || "", "application/xml");
+  }
+
+  function getFirstTagText(xml, tagName) {
+    const el = xml.getElementsByTagName(tagName)[0];
+    return el ? el.textContent : "";
+  }
+
+  function escapeXml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+  }
+
+  async function fetchPayments(url) {
     const response = await fetch(url, { headers: { "Accept": "application/json" } });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const allPayments = await response.json();
-    // Filtruj tylko przelewy typu ELIXIR
-    return allPayments.filter(p => p.type === "ELIXIR");
-  }
-
-  async function fetchPaymentsByStatusAndType(url, status) {
-    const response = await fetch(`${url}/${status}`, { headers: { "Accept": "application/json" } });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const allPayments = await response.json();
-    return allPayments.filter(p => p.type === "ELIXIR");
+    return Array.isArray(allPayments)
+      ? allPayments.filter(p => !p.type || p.type === "ELIXIR")
+      : [];
   }
 
   async function loadPayments() {
     const tbody = document.getElementById("payments-body");
-    tbody.innerHTML = "<tr><td colspan='9'>Ładowanie...</td></tr>";
+    tbody.innerHTML = "<tr><td colspan='12'>Ładowanie...</td></tr>";
     try {
-      const data = await fetchPaymentsByType(`${API}/api/elixir/history`);
+      const data = await fetchPayments(`${API}/api/elixir/payments`);
       renderPayments(data);
     } catch (err) {
-      tbody.innerHTML = "<tr><td colspan='9'>Błąd pobierania przelewów</td></tr>";
+      tbody.innerHTML = `<tr><td colspan='12'>Błąd pobierania przelewów: ${escapeHtml(err.message)}</td></tr>`;
     }
   }
 
   async function loadPaymentsByStatus(status) {
     const tbody = document.getElementById("payments-body");
-    tbody.innerHTML = "<tr><td colspan='9'>Ładowanie...</td></tr>";
+    tbody.innerHTML = "<tr><td colspan='12'>Ładowanie...</td></tr>";
+    const statusPath = {
+      QUEUED: "queued",
+      PROCESSED: "processed",
+      BLOCKED: "blocked",
+      REJECTED: "rejected"
+    }[status];
+
+    if (!statusPath) {
+      tbody.innerHTML = "<tr><td colspan='12'>Nieznany status.</td></tr>";
+      return;
+    }
+
     try {
-      const data = await fetchPaymentsByStatusAndType(`${API}/api/elixir/history/status`, status);
+      const data = await fetchPayments(`${API}/api/elixir/payments/${statusPath}`);
       renderPayments(data);
     } catch (err) {
-      tbody.innerHTML = "<tr><td colspan='9'>Błąd pobierania przelewów</td></tr>";
+      tbody.innerHTML = `<tr><td colspan='12'>Błąd pobierania przelewów: ${escapeHtml(err.message)}</td></tr>`;
     }
   }
 
   function renderPayments(data) {
     const tbody = document.getElementById("payments-body");
     if (!Array.isArray(data) || data.length === 0) {
-      tbody.innerHTML = "<tr><td colspan='9'>Brak danych (brak przelewów ELIXIR)</td></tr>";
+      tbody.innerHTML = "<tr><td colspan='12'>Brak danych dla przelewów ELIXIR.</td></tr>";
       return;
     }
+
     tbody.innerHTML = data.map(p => `
       <tr>
-        <td>${p.paymentId || "-"}</td>
-        <td>${p.senderAccount || "-"}</td>
-        <td>${p.receiverAccount || "-"}</td>
+        <td class="mono small">${escapeHtml(p.paymentId || "-")}</td>
+        <td>${escapeHtml(p.senderName || p.debtorName || "-")}</td>
+        <td>${escapeHtml(p.senderBankId || "-")}</td>
+        <td class="mono">${escapeHtml(p.senderAccount || p.senderIban || "-")}</td>
+        <td>${escapeHtml(p.receiverName || p.creditorName || "-")}</td>
+        <td>${escapeHtml(p.receiverBankId || "-")}</td>
+        <td class="mono">${escapeHtml(p.receiverAccount || p.receiverIban || "-")}</td>
         <td>${formatMoney(p.amount, p.currency)}</td>
-        <td>${p.currency || "PLN"}</td>
-        <td>${p.title || "-"}</td>
-        <td><span class="status ${String(p.status || '').toLowerCase()}">${p.status || "-"}</span></td>
-        <td><span class="type-badge">${p.type || "ELIXIR"}</span></td>
+        <td>${escapeHtml(p.title || "-")}</td>
+        <td><span class="status ${String(p.status || '').toLowerCase()}">${escapeHtml(p.status || "-")}</span></td>
+        <td><span class="type-badge">${escapeHtml(p.type || "ELIXIR")}</span></td>
         <td>${formatDate(p.createdAt)}</td>
       </tr>
     `).join("");
   }
 
-  // XML dla liquidity, blocked, raportów (bez zmian)
   async function fetchXml(url) {
-    const response = await fetch(url, { headers: { "Accept": "application/xml, text/xml, */*" } });
+    const response = await fetch(url, { headers: { "Accept": "application/xml, text/xml, application/json, */*" } });
     const text = await response.text();
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return { text, xml: parseXml(text) };
+  }
+
+  async function fetchJsonOrXmlMap(url) {
+    const response = await fetch(url, { headers: { "Accept": "application/json, application/xml, text/xml, */*" } });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      return parseMapXml(parseXml(text));
+    }
   }
 
   function parseMapXml(xml) {
@@ -292,31 +579,44 @@
     if (!root || root.tagName === "parsererror" || !root.tagName) return null;
     if (root.textContent?.trim() === "null") return null;
     const nettingResultNode = root.getElementsByTagName("nettingResult")[0];
-    const nettingItems = nettingResultNode ? Array.from(nettingResultNode.getElementsByTagName("item")).map(x => x.textContent?.trim() ?? "") : [];
-    return { sessionName: getFirstTagText(xml, "sessionName"), closedAt: getFirstTagText(xml, "closedAt"), nettingResult: nettingItems };
+    const nettingItems = nettingResultNode
+      ? Array.from(nettingResultNode.getElementsByTagName("item")).map(x => x.textContent?.trim() ?? "")
+      : [];
+    return {
+      sessionName: getFirstTagText(xml, "sessionName"),
+      closedAt: getFirstTagText(xml, "closedAt"),
+      nettingResult: nettingItems
+    };
   }
 
   async function refreshWorkerView() {
     const bank = document.getElementById("selectedBank").value;
     const limit = BANK_LIMITS[bank] ?? -1000;
     document.getElementById("limit-value").textContent = formatMoney(limit, "PLN");
-    await Promise.all([ loadLiquidity(bank, limit), loadBankReport(bank), loadLatestSessionReport() ]);
+    await Promise.all([
+      loadLiquidity(bank, limit),
+      loadCurrentExposure(bank),
+      loadBankReport(bank),
+      loadLatestSessionReport()
+    ]);
   }
 
   async function loadLiquidity(bank, limit) {
     try {
       const [liquidityData, blockedData] = await Promise.all([
-        fetchXml(`${API}/api/elixir/liquidity`).then(r => parseMapXml(r.xml)),
-        fetchXml(`${API}/api/elixir/blocked`).then(r => parseMapXml(r.xml))
+        fetchJsonOrXmlMap(`${API}/api/elixir/liquidity`),
+        fetchJsonOrXmlMap(`${API}/api/elixir/blocked`)
       ]);
+
       const balance = Number(liquidityData[bank] ?? 0);
       const isBlocked = Boolean(blockedData[bank]);
       document.getElementById("balance-value").textContent = formatMoney(balance, "PLN");
       document.getElementById("blocked-value").textContent = isBlocked ? "ZABLOKOWANY" : "AKTYWNY";
+
       const alertBox = document.getElementById("bank-alert");
       if (balance < limit || isBlocked) {
         alertBox.classList.remove("hidden");
-        alertBox.innerHTML = `<strong>Uwaga:</strong> Bank ${bank} przekroczył limit zadłużenia lub został zablokowany.`;
+        alertBox.innerHTML = `<strong>Uwaga:</strong> Bank ${escapeHtml(bank)} przekroczył limit zadłużenia albo został zablokowany. Przy zamykaniu sesji Elixir powinien poprosić Sorbnet o zasilenie konta technicznego.`;
         openPopup(bank, balance, limit, isBlocked);
       } else {
         alertBox.classList.add("hidden");
@@ -328,6 +628,33 @@
     }
   }
 
+  async function loadCurrentExposure(bank) {
+    const countSpan = document.getElementById("bank-report-count");
+    const alertBox = document.getElementById("bank-alert");
+
+    try {
+      const response = await fetch(`${API}/api/elixir/session/bank/${bank}/current-exposure`, {
+        headers: { "Accept": "application/json" }
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+
+      const obligation = Number(data.currentObligation ?? 0);
+      const projected = Number(data.projectedBalanceAfterObligation ?? 0);
+      const requiredTopUp = Number(data.requiredTopUp ?? 0);
+      const liquidityRisk = Boolean(data.liquidityRisk);
+
+      countSpan.textContent = `${formatMoney(obligation, "PLN")} / po sesji: ${formatMoney(projected, "PLN")}`;
+
+      if (liquidityRisk) {
+        alertBox.classList.remove("hidden");
+        alertBox.innerHTML = `<strong>Alert płynności:</strong> Bank ${escapeHtml(bank)} przekracza limit w bieżącej sesji. Wymagane zasilenie: ${formatMoney(requiredTopUp, "PLN")}.`;
+        openPopup(bank, projected, Number(data.lowestAllowedBalance ?? 0), Boolean(data.blocked));
+      }
+    } catch (err) {
+    }
+  }
+
   async function loadBankReport(bank) {
     const list = document.getElementById("bank-report-list");
     const countSpan = document.getElementById("bank-report-count");
@@ -336,14 +663,11 @@
       const data = parseStringListXml(xml);
       if (!Array.isArray(data) || data.length === 0) {
         list.innerHTML = "<li>Brak raportu dla banku z ostatniej sesji.</li>";
-        countSpan.textContent = "0 pozycji";
         return;
       }
-      countSpan.textContent = `${data.length} pozycji`;
       list.innerHTML = data.map(line => `<li>${escapeHtml(line)}</li>`).join("");
     } catch (err) {
       list.innerHTML = "<li>Błąd pobierania raportu banku.</li>";
-      countSpan.textContent = "Błąd";
     }
   }
 
@@ -356,7 +680,10 @@
         return;
       }
       const data = parseSessionReportXml(xml);
-      if (!data) { box.textContent = "Brak raportu z ostatniej sesji."; return; }
+      if (!data) {
+        box.textContent = "Brak raportu z ostatniej sesji.";
+        return;
+      }
       box.textContent = `Sesja: ${data.sessionName || "-"}\nZamknięta: ${formatDate(data.closedAt)}\n\n${data.nettingResult?.length ? data.nettingResult.join("\n") : "Brak pozycji w raporcie."}`;
     } catch (err) {
       box.textContent = "Brak raportu z ostatniej sesji.";
@@ -367,40 +694,84 @@
     const bank = document.getElementById("selectedBank").value;
     const amount = document.getElementById("topupAmount").value;
     const message = document.getElementById("topup-message");
-    if (!amount || Number(amount) <= 0) { message.textContent = "Podaj poprawną kwotę top-up."; return; }
+    message.className = "message";
+
+    if (!amount || Number(amount) <= 0) {
+      message.classList.add("error");
+      message.textContent = "Podaj poprawną kwotę top-up.";
+      return;
+    }
+
     try {
-      const response = await fetch(`${API}/api/elixir/topup/${bank}?amount=${amount}`, { method: "POST", headers: { "Accept": "text/plain, application/xml, */*" } });
+      const response = await fetch(`${API}/api/elixir/topup/${bank}?amount=${encodeURIComponent(amount)}`, {
+        method: "POST",
+        headers: { "Accept": "text/plain, application/xml, */*" }
+      });
       const text = await response.text();
+      if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
+      message.classList.add("success");
       message.textContent = text || "Top-up wykonany.";
       await refreshWorkerView();
-    } catch (err) { message.textContent = "Błąd podczas top-up."; }
+    } catch (err) {
+      message.classList.add("error");
+      message.textContent = `Błąd podczas top-up: ${err.message}`;
+    }
   }
 
   async function unblockSelectedBank() {
     const bank = document.getElementById("selectedBank").value;
     const message = document.getElementById("topup-message");
+    message.className = "message";
+
     try {
-      const response = await fetch(`${API}/api/elixir/unblock/${bank}`, { method: "POST", headers: { "Accept": "text/plain, application/xml, */*" } });
+      const response = await fetch(`${API}/api/elixir/unblock/${bank}`, {
+        method: "POST",
+        headers: { "Accept": "text/plain, application/xml, */*" }
+      });
       const text = await response.text();
+      if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
+      message.classList.add("success");
       message.textContent = text || "Bank odblokowany.";
       await refreshWorkerView();
-    } catch (err) { message.textContent = "Błąd podczas odblokowania banku."; }
+    } catch (err) {
+      message.classList.add("error");
+      message.textContent = `Błąd podczas odblokowania banku: ${err.message}`;
+    }
   }
 
   function openPopup(bank, balance, limit, isBlocked) {
     const popup = document.getElementById("popup-overlay");
     const popupText = document.getElementById("popup-text");
-    popupText.textContent = `Bank ${bank} przekroczył limit zadłużenia lub został zablokowany. Saldo: ${formatMoney(balance, "PLN")}, limit: ${formatMoney(limit, "PLN")}. ${isBlocked ? "Bank jest obecnie zablokowany." : "Wymagane uzupełnienie środków."}`;
+    popupText.textContent = `Bank ${bank} przekroczył limit zadłużenia albo został zablokowany. Saldo techniczne ELIXIR: ${formatMoney(balance, "PLN")}, limit: ${formatMoney(limit, "PLN")}. ${isBlocked ? "Bank jest obecnie zablokowany." : "Przy zamknięciu sesji może być wymagane zasilenie z Sorbnetu."}`;
     popup.classList.remove("hidden");
   }
-  function closePopup() { document.getElementById("popup-overlay").classList.add("hidden"); }
 
-  function formatMoney(value, currency = "PLN") { if (value === null || value === undefined || isNaN(Number(value))) return "-"; return `${Number(value).toFixed(2)} ${currency || "PLN"}`; }
-  function formatDate(value) { if (!value) return "-"; return String(value).replace("T", " "); }
-  function escapeHtml(value) { return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+  function closePopup() {
+    document.getElementById("popup-overlay").classList.add("hidden");
+  }
+
+  function formatMoney(value, currency = "PLN") {
+    if (value === null || value === undefined || isNaN(Number(value))) return "-";
+    return `${Number(value).toFixed(2)} ${currency || "PLN"}`;
+  }
+
+  function formatDate(value) {
+    if (!value) return "-";
+    return String(value).replace("T", " ");
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
 
   loadPayments();
   refreshWorkerView();
 </script>
 </body>
 </html>
+

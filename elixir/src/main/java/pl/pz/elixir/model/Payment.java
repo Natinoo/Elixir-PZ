@@ -12,6 +12,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
 import org.springframework.data.domain.Persistable;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -22,6 +23,9 @@ public class Payment implements Persistable<String> {
     @Id
     @Column(name = "payment_id", nullable = false, updatable = false)
     private String paymentId;
+
+    @Column(name = "service_code", nullable = false, length = 32)
+    private String serviceCode;
 
     @Column(name = "sender_bank_id", nullable = false)
     private String senderBankId;
@@ -35,8 +39,14 @@ public class Payment implements Persistable<String> {
     @Column(name = "receiver_account", nullable = false)
     private String receiverAccount;
 
-    @Column(nullable = false)
-    private Double amount;
+    @Column(name = "sender_name")
+    private String senderName;
+
+    @Column(name = "receiver_name")
+    private String receiverName;
+
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal amount;
 
     @Column(nullable = false)
     private String currency;
@@ -51,8 +61,11 @@ public class Payment implements Persistable<String> {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "type")
-    private String type;  // np. "STANDARD", "EXPRESS", "SORBNET"
+    @Column(name = "type", nullable = false, length = 32)
+    private String type;
+
+    @Column(name = "session_id")
+    private String sessionId;
 
     @Transient
     private boolean isNew = true;
@@ -60,30 +73,32 @@ public class Payment implements Persistable<String> {
     public Payment() {
     }
 
-    public Payment(
-        String paymentId,
-        String senderBankId,
-        String receiverBankId,
-        String senderAccount,
-        String receiverAccount,
-        Double amount,
-        String currency,
-        String title,
-        PaymentStatus status,
-        LocalDateTime createdAt,
-        String type
-    ) {
+    public Payment(String paymentId, String serviceCode, String senderBankId, String receiverBankId,
+                   String senderAccount, String receiverAccount, BigDecimal amount, String currency,
+                   String title, PaymentStatus status, LocalDateTime createdAt, String type, String sessionId) {
+        this(paymentId, serviceCode, senderBankId, receiverBankId, senderAccount, receiverAccount,
+                null, null, amount, currency, title, status, createdAt, type, sessionId);
+    }
+
+    public Payment(String paymentId, String serviceCode, String senderBankId, String receiverBankId,
+                   String senderAccount, String receiverAccount, String senderName, String receiverName,
+                   BigDecimal amount, String currency, String title, PaymentStatus status,
+                   LocalDateTime createdAt, String type, String sessionId) {
         this.paymentId = paymentId;
+        this.serviceCode = serviceCode;
         this.senderBankId = senderBankId;
         this.receiverBankId = receiverBankId;
         this.senderAccount = senderAccount;
         this.receiverAccount = receiverAccount;
+        this.senderName = senderName;
+        this.receiverName = receiverName;
         this.amount = amount;
         this.currency = currency;
         this.title = title;
         this.status = status;
         this.createdAt = createdAt;
         this.type = type;
+        this.sessionId = sessionId;
         this.isNew = true;
     }
 
@@ -97,6 +112,12 @@ public class Payment implements Persistable<String> {
         }
         if (this.createdAt == null) {
             this.createdAt = LocalDateTime.now();
+        }
+        if (this.serviceCode == null || this.serviceCode.isBlank()) {
+            this.serviceCode = "ELIXIR";
+        }
+        if (this.type == null || this.type.isBlank()) {
+            this.type = this.serviceCode;
         }
     }
 
@@ -116,7 +137,6 @@ public class Payment implements Persistable<String> {
         return isNew;
     }
 
-    // Gettery i settery
     public String getPaymentId() {
         return paymentId;
     }
@@ -125,20 +145,12 @@ public class Payment implements Persistable<String> {
         this.paymentId = paymentId;
     }
 
-    public String getSenderAccount() {
-        return senderAccount;
+    public String getServiceCode() {
+        return serviceCode;
     }
 
-    public void setSenderAccount(String senderAccount) {
-        this.senderAccount = senderAccount;
-    }
-
-    public String getReceiverAccount() {
-        return receiverAccount;
-    }
-
-    public void setReceiverAccount(String receiverAccount) {
-        this.receiverAccount = receiverAccount;
+    public void setServiceCode(String serviceCode) {
+        this.serviceCode = serviceCode;
     }
 
     public String getSenderBankId() {
@@ -157,11 +169,43 @@ public class Payment implements Persistable<String> {
         this.receiverBankId = receiverBankId;
     }
 
-    public Double getAmount() {
+    public String getSenderAccount() {
+        return senderAccount;
+    }
+
+    public void setSenderAccount(String senderAccount) {
+        this.senderAccount = senderAccount;
+    }
+
+    public String getReceiverAccount() {
+        return receiverAccount;
+    }
+
+    public void setReceiverAccount(String receiverAccount) {
+        this.receiverAccount = receiverAccount;
+    }
+
+    public String getSenderName() {
+        return senderName;
+    }
+
+    public void setSenderName(String senderName) {
+        this.senderName = senderName;
+    }
+
+    public String getReceiverName() {
+        return receiverName;
+    }
+
+    public void setReceiverName(String receiverName) {
+        this.receiverName = receiverName;
+    }
+
+    public BigDecimal getAmount() {
         return amount;
     }
 
-    public void setAmount(Double amount) {
+    public void setAmount(BigDecimal amount) {
         this.amount = amount;
     }
 
@@ -203,5 +247,13 @@ public class Payment implements Persistable<String> {
 
     public void setType(String type) {
         this.type = type;
+    }
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
     }
 }

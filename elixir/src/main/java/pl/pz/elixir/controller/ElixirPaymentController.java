@@ -11,7 +11,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 import pl.pz.elixir.dto.ElixirPaymentDto;
 import pl.pz.elixir.model.Payment;
 import pl.pz.elixir.model.PaymentStatus;
@@ -21,7 +25,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/elixir/payments")
-@Tag(name = "Przelewy Elixir", description = "Zarządzanie przelewami w systemie Elixir (wysyłanie, lista, filtrowanie)")
+@Tag(name = "Przelewy Elixir", description = "Zarządzanie przelewami w systemie Elixir w formacie ISO 20022 XML")
 public class ElixirPaymentController {
 
     private static final Logger log = LoggerFactory.getLogger(ElixirPaymentController.class);
@@ -32,74 +36,74 @@ public class ElixirPaymentController {
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
-@Operation(
-        summary = "Utwórz nowy przelew",
-        description = "Przyjmuje przelew w formacie XML i dodaje go do bieżącej sesji. Przelew otrzymuje status QUEUED.",
-        requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
-                required = true,
-                content = @Content(
-                        mediaType = MediaType.APPLICATION_XML_VALUE,
-                        examples = @ExampleObject(
-                                name = "XML request",
-                                value = """
-                                        <Payment>
-                                            <paymentId>ELIX-20260606-0001</paymentId>
-                                            <amount>1000.00</amount>
-                                            <currency>PLN</currency>
-                                            <senderBankId>BANK_A</senderBankId>
-                                            <receiverBankId>BANK_B</receiverBankId>
-                                            <senderAccount>11111100000000000000000001</senderAccount>
-                                            <receiverAccount>22222200000000000000000002</receiverAccount>
-                                            <title>Przelew klientowski</title>
-                                        </Payment>
-                                        """
-                        )
-                )
-        )
-)
-@ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Przelew przyjęty do sesji",
-                content = @Content(mediaType = MediaType.APPLICATION_XML_VALUE,
-                        examples = @ExampleObject(value = """
-                                <?xml version="1.0" encoding="UTF-8"?>
-                                <PaymentResponse>
-                                    <paymentId>123e4567-e89b-12d3-a456-426614174000</paymentId>
-                                    <status>QUEUED_FOR_SESSION</status>
-                                </PaymentResponse>
-                                """))),
-        @ApiResponse(responseCode = "400", description = "Błędne dane",
-                content = @Content(mediaType = MediaType.APPLICATION_XML_VALUE,
-                        examples = @ExampleObject(value = """
-                                <?xml version="1.0" encoding="UTF-8"?>
-                                <Error>
-                                    <message>Amount must be greater than 0</message>
-                                </Error>
-                                """)))
-})
-
+    @Operation(
+            summary = "Utwórz nowy przelew Elixir",
+            description = "Przyjmuje uproszczony komunikat ISO 20022 pacs.008 i dodaje przelew do bieżącej sesji Elixir.",
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_XML_VALUE,
+                            examples = @ExampleObject(
+                                    name = "ISO 20022 request",
+                                    value = """
+                                            <Document>
+                                                <FIToFICstmrCdtTrf>
+                                                    <GrpHdr>
+                                                        <MsgId>ELIX-20260606-0001</MsgId>
+                                                        <CreDtTm>2026-06-06T10:00:00</CreDtTm>
+                                                        <NbOfTxs>1</NbOfTxs>
+                                                        <TtlIntrBkSttlmAmt Ccy=\"PLN\">1000.00</TtlIntrBkSttlmAmt>
+                                                        <SttlmInf>
+                                                            <SttlmMtd>CLRG</SttlmMtd>
+                                                            <ClrSys><Cd>ELIXIR</Cd></ClrSys>
+                                                        </SttlmInf>
+                                                    </GrpHdr>
+                                                    <CdtTrfTxInf>
+                                                        <PmtId>
+                                                            <InstrId>ELIX-20260606-0001</InstrId>
+                                                            <EndToEndId>ELIX-20260606-0001</EndToEndId>
+                                                            <TxId>ELIX-20260606-0001</TxId>
+                                                        </PmtId>
+                                                        <IntrBkSttlmAmt Ccy=\"PLN\">1000.00</IntrBkSttlmAmt>
+                                                        <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
+                                                        <CdtrAgt><FinInstnId><BICFI>BANK_B</BICFI></FinInstnId></CdtrAgt>
+                                                        <DbtrAcct><Id><IBAN>ANY</IBAN></Id></DbtrAcct>
+                                                        <CdtrAcct><Id><IBAN>ANY</IBAN></Id></CdtrAcct>
+                                                        <RmtInf><Ustrd>Przelew klientowski</Ustrd></RmtInf>
+                                                        <SplmtryData>
+                                                            <Envlp>
+                                                                <ServiceCode>ELIXIR</ServiceCode>
+                                                                <SenderBankId>BANK_A</SenderBankId>
+                                                                <ReceiverBankId>BANK_B</ReceiverBankId>
+                                                            </Envlp>
+                                                        </SplmtryData>
+                                                    </CdtTrfTxInf>
+                                                </FIToFICstmrCdtTrf>
+                                            </Document>
+                                            """
+                            )
+                    )
+            )
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Przelew przyjęty do sesji",
+                    content = @Content(mediaType = MediaType.APPLICATION_XML_VALUE)),
+            @ApiResponse(responseCode = "400", description = "Błędne dane",
+                    content = @Content(mediaType = MediaType.APPLICATION_XML_VALUE))
+    })
     public ResponseEntity<String> createPayment(@RequestBody ElixirPaymentDto paymentDto) {
-        log.info("=== POST /api/elixir/payments ===");
-        log.info("Received DTO: senderBank={}, receiverBank={}, senderAccount={}, receiverAccount={}, amount={}, title={}",
-                paymentDto.getSenderBankId(), paymentDto.getReceiverBankId(),
-                paymentDto.getSenderAccount(), paymentDto.getReceiverAccount(),
-                paymentDto.getAmount(), paymentDto.getTitle());
+        log.info("POST /api/elixir/payments senderBank={}, receiverBank={}, amount={}",
+                paymentDto.getSenderBankId(), paymentDto.getReceiverBankId(), paymentDto.getAmount());
         try {
-            String responseXml = paymentService.processPayment(paymentDto);
-            log.info("Response sent successfully");
-            return ResponseEntity.ok(responseXml);
+            return ResponseEntity.ok(paymentService.processPayment(paymentDto));
         } catch (IllegalArgumentException e) {
             log.warn("Validation error: {}", e.getMessage());
-            String errorXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><message>" + e.getMessage() + "</message></Error>";
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorXml);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorXml(e.getMessage()));
         } catch (Exception e) {
             log.error("Unexpected error", e);
-            String errorXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><message>Internal server error: " + e.getMessage() + "</message></Error>";
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorXml);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorXml("Internal server error: " + e.getMessage()));
         }
     }
-
-    // Usuń lub zakomentuj stary @ExceptionHandler dla IllegalArgumentException
-    // Jeśli istnieje, usuń go całkowicie.
 
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Pobierz wszystkie przelewy")
@@ -129,5 +133,26 @@ public class ElixirPaymentController {
     @Operation(summary = "Pobierz przelewy odrzucone")
     public List<Payment> rejectedPayments() {
         return paymentService.getPaymentsByStatus(PaymentStatus.REJECTED);
+    }
+
+    @GetMapping(value = "/waiting-liquidity", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Pobierz przelewy oczekujące na uzupełnienie płynności")
+    public List<Payment> waitingForLiquidityPayments() {
+        return paymentService.getPaymentsByStatus(PaymentStatus.WAITING_FOR_LIQUIDITY);
+    }
+
+    private String errorXml(String message) {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><message>" + escapeXml(message) + "</message></Error>";
+    }
+
+    private String escapeXml(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&apos;");
     }
 }

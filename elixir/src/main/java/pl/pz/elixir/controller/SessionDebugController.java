@@ -10,7 +10,7 @@ import pl.pz.elixir.service.SessionService;
 
 @RestController
 @RequestMapping("/api/elixir/session")
-@Tag(name = "Debugowanie sesji", description = "Endpointy pomocnicze do testowania (ręczne zamykanie sesji)")
+@Tag(name = "Debugowanie sesji", description = "Endpointy pomocnicze do testowania ręcznego zamykania sesji")
 public class SessionDebugController {
 
     private final SessionService sessionService;
@@ -20,10 +20,12 @@ public class SessionDebugController {
     }
 
     @PostMapping("/close-test")
-    @Operation(summary = "Ręczne zamknięcie sesji testowej", description = "Kończy bieżącą sesję i uruchamia proces rozliczeń (netting).")
+    @Operation(
+            summary = "Ręczne zamknięcie sesji testowej",
+            description = "Kończy bieżącą sesję i uruchamia proces rozliczeń: netting, kontrolę płynności oraz ewentualne wysłanie wyniku do Sorbnetu."
+    )
     @ApiResponse(responseCode = "200", description = "Sesja zamknięta")
-    public String closeTestSession() {
-        sessionService.closeSession("TEST-MANUAL");
-        return "TEST SESSION CLOSED";
+    public SessionService.SessionCloseResult closeTestSession() {
+        return sessionService.closeSession();
     }
 }

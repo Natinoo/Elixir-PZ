@@ -2,65 +2,92 @@ package pl.pz.elixir.service;
 
 import org.springframework.stereotype.Service;
 import pl.pz.elixir.dto.ElixirPaymentDto;
+import pl.pz.elixir.dto.NettingTransferDto;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class NettingService {
 
+    private static final BigDecimal ZERO_THRESHOLD = new BigDecimal("0.01");
+
     public List<String> calculateNetting(List<ElixirPaymentDto> payments) {
-        Map<String, Double> balanceMap = new HashMap<>();
+        return calculateNettingTransfers(payments, null, "ELIXIR").stream()
+                .map(t -> t.getDebtorBankId() + " pays " + t.getCreditorBankId() + " = " + t.getAmount())
+                .toList();
+    }
+
+    public List<NettingTransferDto> calculateNettingTransfers(List<ElixirPaymentDto> payments,
+                                                              String sessionId,
+                                                              String serviceCode) {
+        Map<String, BigDecimal> balanceMap = new HashMap<>();
+        String currency = "PLN";
 
         for (ElixirPaymentDto payment : payments) {
             String sender = payment.getSenderBankId();
             String receiver = payment.getReceiverBankId();
-            Double amount = payment.getAmount();
+            BigDecimal amount = payment.getAmount();
+            currency = payment.getCurrency() == null ? currency : payment.getCurrency();
 
-            balanceMap.put(sender, balanceMap.getOrDefault(sender, 0.0) - amount);
-            balanceMap.put(receiver, balanceMap.getOrDefault(receiver, 0.0) + amount);
+            balanceMap.put(sender, balanceMap.getOrDefault(sender, BigDecimal.ZERO).subtract(amount));
+            balanceMap.put(receiver, balanceMap.getOrDefault(receiver, BigDecimal.ZERO).add(amount));
         }
 
-        List<Map.Entry<String, Double>> debtors = new ArrayList<>();
-        List<Map.Entry<String, Double>> creditors = new ArrayList<>();
+        List<Map.Entry<String, BigDecimal>> debtors = new ArrayList<>();
+        List<Map.Entry<String, BigDecimal>> creditors = new ArrayList<>();
 
-        for (Map.Entry<String, Double> entry : balanceMap.entrySet()) {
-            if (entry.getValue() < 0) {
+        for (Map.Entry<String, BigDecimal> entry : balanceMap.entrySet()) {
+            if (entry.getValue().compareTo(BigDecimal.ZERO) < 0) {
                 debtors.add(entry);
-            } else if (entry.getValue() > 0) {
+            } else if (entry.getValue().compareTo(BigDecimal.ZERO) > 0) {
                 creditors.add(entry);
             }
         }
 
-        debtors.sort(Comparator.comparingDouble(Map.Entry::getValue));
-        creditors.sort((a, b) -> Double.compare(b.getValue(), a.getValue()));
+        debtors.sort(Comparator.comparing(Map.Entry::getValue));
+        creditors.sort((a, b) -> b.getValue().compareTo(a.getValue()));
 
-        List<String> results = new ArrayList<>();
+        List<NettingTransferDto> results = new ArrayList<>();
+        int debtorIndex = 0;
+        int creditorIndex = 0;
+        int sequence = 1;
 
-        int i = 0;
-        int j = 0;
+        while (debtorIndex < debtors.size() && creditorIndex < creditors.size()) {
+            Map.Entry<String, BigDecimal> debtor = debtors.get(debtorIndex);
+            Map.Entry<String, BigDecimal> creditor = creditors.get(creditorIndex);
 
-        while (i < debtors.size() && j < creditors.size()) {
-            Map.Entry<String, Double> debtor = debtors.get(i);
-            Map.Entry<String, Double> creditor = creditors.get(j);
+            BigDecimal debt = debtor.getValue().abs();
+            BigDecimal credit = creditor.getValue();
+            BigDecimal transferAmount = debt.min(credit).setScale(2, RoundingMode.HALF_UP);
 
-            double debt = -debtor.getValue();
-            double credit = creditor.getValue();
-            double transfer = Math.min(debt, credit);
+            String transferId = "NET-" + (sessionId == null ? UUID.randomUUID() : sessionId) + "-" + sequence++;
+            results.add(new NettingTransferDto(
+                    transferId,
+                    sessionId,
+                    debtor.getKey(),
+                    creditor.getKey(),
+                    null,
+                    null,
+                    transferAmount,
+                    currency,
+                    serviceCode
+            ));
 
-            results.add(debtor.getKey() + " pays " + creditor.getKey() + " = " + transfer);
+            debtor.setValue(debtor.getValue().add(transferAmount));
+            creditor.setValue(creditor.getValue().subtract(transferAmount));
 
-            debtor.setValue(debtor.getValue() + transfer);
-            creditor.setValue(creditor.getValue() - transfer);
-
-            if (Math.abs(debtor.getValue()) < 0.01) {
-                i++;
+            if (debtor.getValue().abs().compareTo(ZERO_THRESHOLD) < 0) {
+                debtorIndex++;
             }
-            if (Math.abs(creditor.getValue()) < 0.01) {
-                j++;
+            if (creditor.getValue().abs().compareTo(ZERO_THRESHOLD) < 0) {
+                creditorIndex++;
             }
         }
 
