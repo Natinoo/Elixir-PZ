@@ -5,6 +5,7 @@ import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlAttribute;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
+import jakarta.xml.bind.annotation.XmlType;
 import jakarta.xml.bind.annotation.XmlValue;
 
 import java.math.BigDecimal;
@@ -240,7 +241,7 @@ public class SorbnetPaymentDto {
         @XmlElement(name = "CdtTrfTxInf")
         private CreditTransferTransactionInformation cdtTrfTxInf = new CreditTransferTransactionInformation();
     }
-
+    @XmlType(name = "SorbnetGroupHeader")
     @XmlAccessorType(XmlAccessType.NONE)
     public static class GroupHeader {
 
@@ -325,7 +326,7 @@ public class SorbnetPaymentDto {
         @XmlElement(name = "TxId")
         private String txId;
     }
-
+    @XmlType(name = "SorbnetActiveCurrencyAndAmount")
     @XmlAccessorType(XmlAccessType.NONE)
     public static class ActiveCurrencyAndAmount {
 
@@ -350,7 +351,7 @@ public class SorbnetPaymentDto {
         @XmlElement(name = "Nm")
         private String nm;
     }
-
+    @XmlType(name = "SorbnetBranchAndFinancialInstitutionIdentification")
     @XmlAccessorType(XmlAccessType.NONE)
     public static class BranchAndFinancialInstitutionIdentification {
 
@@ -358,21 +359,21 @@ public class SorbnetPaymentDto {
         private FinancialInstitutionIdentification finInstnId =
                 new FinancialInstitutionIdentification();
     }
-
+    @XmlType(name = "SorbnetFinancialInstitutionIdentification")
     @XmlAccessorType(XmlAccessType.NONE)
     public static class FinancialInstitutionIdentification {
 
         @XmlElement(name = "BICFI")
         private String bicfi;
     }
-
+    @XmlType(name = "SorbnetCashAccount")
     @XmlAccessorType(XmlAccessType.NONE)
     public static class CashAccount {
 
         @XmlElement(name = "Id")
         private AccountIdentification id = new AccountIdentification();
     }
-
+    @XmlType(name = "SorbnetAccountIdentification")
     @XmlAccessorType(XmlAccessType.NONE)
     public static class AccountIdentification {
 
@@ -386,14 +387,15 @@ public class SorbnetPaymentDto {
         @XmlElement(name = "Ustrd")
         private String ustrd;
     }
-
+    @XmlType(name = "SorbnetSupplementaryData")
     @XmlAccessorType(XmlAccessType.NONE)
     public static class SupplementaryData {
-
+        
         @XmlElement(name = "Envlp")
         private Envelope envlp = new Envelope();
     }
 
+    @XmlType(name = "SorbnetEnvelope") 
     @XmlAccessorType(XmlAccessType.NONE)
     public static class Envelope {
 

@@ -5,6 +5,7 @@ import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlAttribute;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
+import jakarta.xml.bind.annotation.XmlType;
 import jakarta.xml.bind.annotation.XmlValue;
 
 import java.math.BigDecimal;
@@ -179,7 +180,7 @@ public class PaymentResponseDto {
         @XmlElement(name = "OrgnlPmtInfAndSts")
         private OriginalPaymentInformationAndStatus orgnlPmtInfAndSts = new OriginalPaymentInformationAndStatus();
     }
-
+    @XmlType(name = "ResponseGroupHeader")
     @XmlAccessorType(XmlAccessType.FIELD)
     public static class GroupHeader {
         @XmlElement(name = "MsgId")
@@ -245,7 +246,7 @@ public class PaymentResponseDto {
         @XmlElement(name = "SplmtryData")
         private SupplementaryData splmtryData = new SupplementaryData();
     }
-
+    @XmlType(name = "ResponseActiveCurrencyAndAmount")      
     @XmlAccessorType(XmlAccessType.FIELD)
     public static class ActiveCurrencyAndAmount {
         @XmlAttribute(name = "Ccy")
@@ -254,37 +255,37 @@ public class PaymentResponseDto {
         @XmlValue
         private BigDecimal value;
     }
-
+    @XmlType(name = "ResponseBranchAndFinancialInstitutionIdentification")
     @XmlAccessorType(XmlAccessType.FIELD)
     public static class BranchAndFinancialInstitutionIdentification {
         @XmlElement(name = "FinInstnId")
         private FinancialInstitutionIdentification finInstnId = new FinancialInstitutionIdentification();
     }
-
+    @XmlType(name = "ResponseFinancialInstitutionIdentification")
     @XmlAccessorType(XmlAccessType.FIELD)
     public static class FinancialInstitutionIdentification {
         @XmlElement(name = "BICFI")
         private String bicfi;
     }
-
+    @XmlType(name = "ResponseCashAccount")
     @XmlAccessorType(XmlAccessType.FIELD)
     public static class CashAccount {
         @XmlElement(name = "Id")
         private AccountIdentification id = new AccountIdentification();
     }
-
+    @XmlType(name = "ResponseAccountIdentification")
     @XmlAccessorType(XmlAccessType.FIELD)
     public static class AccountIdentification {
         @XmlElement(name = "IBAN")
         private String iban;
     }
-
+    @XmlType(name = "ResponseSupplementaryData") 
     @XmlAccessorType(XmlAccessType.FIELD)
     public static class SupplementaryData {
         @XmlElement(name = "Envlp")
         private Envelope envlp = new Envelope();
     }
-
+    @XmlType(name = "ResponseEnvelope")
     @XmlAccessorType(XmlAccessType.FIELD)
     public static class Envelope {
         @XmlElement(name = "SourceServiceCode")
