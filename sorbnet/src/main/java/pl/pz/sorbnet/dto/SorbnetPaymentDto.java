@@ -1,85 +1,409 @@
 package pl.pz.sorbnet.dto;
 
-import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
+import jakarta.xml.bind.annotation.XmlAttribute;
+import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
-import jakarta.xml.bind.annotation.XmlType;
+import jakarta.xml.bind.annotation.XmlValue;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
-@XmlRootElement(name = "SorbnetPaymentRequest")
-@XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(propOrder = {
-        "paymentId",
-        "amount",
-        "currency",
-        "senderBankId",
-        "receiverBankId",
-        "senderAccount",
-        "receiverAccount",
-        "title",
-        "status"
-})
-@Schema(
-        name = "SorbnetPaymentRequest",
-        description = "Żądanie XML utworzenia przelewu w systemie SORBNet."
-)
+/**
+ * Zlecenie przelewu SORBNET w formacie ISO 20022 (pacs.008-style).
+ * Root: <Document><FIToFICstmrCdtTrf>...
+ *
+ * Struktura jest identyczna z ElixirPaymentDto po stronie ELIXIR-a,
+ * dzięki czemu ELIXIR/ELIXIR EXPRESS mogą wysyłać do SORBNET-u ten sam
+ * komunikat, którym posługują się wewnętrznie.
+ *
+ * Fasadowe gettery/settery (getPaymentId, getSenderBankId itd.) zachowują
+ * kontrakt starego, płaskiego SorbnetPaymentDto — SorbnetPaymentService
+ * i SorbnetPaymentController działają bez zmian logiki.
+ */
+@XmlRootElement(name = "Document")
+@XmlAccessorType(XmlAccessType.NONE)
 public class SorbnetPaymentDto {
 
-    @Schema(description = "Unikalny identyfikator przelewu.", example = "713e52f6-9fa2-4baf-a0a6-68b4dff987e7")
-    private String paymentId;
+    @XmlElement(name = "FIToFICstmrCdtTrf")
+    private FIToFICustomerCreditTransfer fiToFICstmrCdtTrf = new FIToFICustomerCreditTransfer();
 
-    @Schema(description = "Kwota przelewu.", example = "1000.00", requiredMode = Schema.RequiredMode.REQUIRED)
-    private BigDecimal amount;
+    public SorbnetPaymentDto() {
+    }
 
-    @Schema(description = "Kod waluty przelewu.", example = "PLN")
-    private String currency;
+    public SorbnetPaymentDto(String paymentId, BigDecimal amount, String currency, String senderBankId,
+                             String receiverBankId, String senderAccount, String receiverAccount,
+                             String title, String type) {
+        setPaymentId(paymentId);
+        setAmount(amount);
+        setCurrency(currency);
+        setSenderBankId(senderBankId);
+        setReceiverBankId(receiverBankId);
+        setSenderAccount(senderAccount);
+        setReceiverAccount(receiverAccount);
+        setTitle(title);
+        setType(type);
+        ensureDefaults();
+    }
 
-    @Schema(description = "Identyfikator banku nadawcy.", example = "BANK_A", requiredMode = Schema.RequiredMode.REQUIRED)
-    private String senderBankId;
+    public void ensureDefaults() {
+        if (getPaymentId() == null || getPaymentId().isBlank()) {
+            setPaymentId("SORB-" + System.currentTimeMillis());
+        }
 
-    @Schema(description = "Identyfikator banku odbiorcy.", example = "BANK_B", requiredMode = Schema.RequiredMode.REQUIRED)
-    private String receiverBankId;
+        if (getType() == null || getType().isBlank()) {
+            setType("SORBNET");
+        }
 
-    @Schema(description = "Numer rachunku nadawcy.", example = "11111100000000000000000001", requiredMode = Schema.RequiredMode.REQUIRED)
-    private String senderAccount;
+        if (grpHdr().msgId == null || grpHdr().msgId.isBlank()) {
+            grpHdr().msgId = getPaymentId();
+        }
 
-    @Schema(description = "Numer rachunku odbiorcy.", example = "22222200000000000000000002", requiredMode = Schema.RequiredMode.REQUIRED)
-    private String receiverAccount;
+        if (grpHdr().creDtTm == null || grpHdr().creDtTm.isBlank()) {
+            grpHdr().creDtTm = LocalDateTime.now().toString();
+        }
 
-    @Schema(description = "Tytuł przelewu.", example = "Rozrachunek rynku międzybankowego")
-    private String title;
+        grpHdr().nbOfTxs = "1";
+        grpHdr().ttlIntrBkSttlmAmt = new ActiveCurrencyAndAmount(getCurrency(), getAmount());
+        // RTGS: rozrachunek na rachunkach w banku centralnym
+        grpHdr().sttlmInf.sttlmMtd = "CLRG";
+        grpHdr().sttlmInf.clrSys.cd = getType();
+    }
 
-    @Schema(description = "Status wejściowy zlecenia.", example = "NEW")
-    private String status;
+    public String getPaymentId() {
+        PaymentIdentification pmtId = tx().pmtId;
 
-    public SorbnetPaymentDto() {}
+        if (pmtId.txId != null && !pmtId.txId.isBlank()) {
+            return pmtId.txId;
+        }
 
-    public String getPaymentId() { return paymentId; }
-    public void setPaymentId(String paymentId) { this.paymentId = paymentId; }
+        if (pmtId.instrId != null && !pmtId.instrId.isBlank()) {
+            return pmtId.instrId;
+        }
 
-    public BigDecimal getAmount() { return amount; }
-    public void setAmount(BigDecimal amount) { this.amount = amount; }
+        return pmtId.endToEndId;
+    }
 
-    public String getCurrency() { return currency; }
-    public void setCurrency(String currency) { this.currency = currency; }
+    public void setPaymentId(String paymentId) {
+        tx().pmtId.instrId = paymentId;
+        tx().pmtId.endToEndId = paymentId;
+        tx().pmtId.txId = paymentId;
+        grpHdr().msgId = paymentId;
+    }
 
-    public String getSenderBankId() { return senderBankId; }
-    public void setSenderBankId(String senderBankId) { this.senderBankId = senderBankId; }
+    public BigDecimal getAmount() {
+        return tx().intrBkSttlmAmt == null ? null : tx().intrBkSttlmAmt.value;
+    }
 
-    public String getReceiverBankId() { return receiverBankId; }
-    public void setReceiverBankId(String receiverBankId) { this.receiverBankId = receiverBankId; }
+    public void setAmount(BigDecimal amount) {
+        if (tx().intrBkSttlmAmt == null) {
+            tx().intrBkSttlmAmt = new ActiveCurrencyAndAmount();
+        }
 
-    public String getSenderAccount() { return senderAccount; }
-    public void setSenderAccount(String senderAccount) { this.senderAccount = senderAccount; }
+        tx().intrBkSttlmAmt.value = amount;
 
-    public String getReceiverAccount() { return receiverAccount; }
-    public void setReceiverAccount(String receiverAccount) { this.receiverAccount = receiverAccount; }
+        if (grpHdr().ttlIntrBkSttlmAmt == null) {
+            grpHdr().ttlIntrBkSttlmAmt = new ActiveCurrencyAndAmount();
+        }
 
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
+        grpHdr().ttlIntrBkSttlmAmt.value = amount;
+    }
 
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
+    public String getCurrency() {
+        return tx().intrBkSttlmAmt == null ? null : tx().intrBkSttlmAmt.currency;
+    }
+
+    public void setCurrency(String currency) {
+        if (tx().intrBkSttlmAmt == null) {
+            tx().intrBkSttlmAmt = new ActiveCurrencyAndAmount();
+        }
+
+        tx().intrBkSttlmAmt.currency = currency;
+
+        if (grpHdr().ttlIntrBkSttlmAmt == null) {
+            grpHdr().ttlIntrBkSttlmAmt = new ActiveCurrencyAndAmount();
+        }
+
+        grpHdr().ttlIntrBkSttlmAmt.currency = currency;
+    }
+
+    public String getSenderBankId() {
+        return tx().dbtrAgt.finInstnId.bicfi;
+    }
+
+    public void setSenderBankId(String senderBankId) {
+        tx().dbtrAgt.finInstnId.bicfi = senderBankId;
+        tx().splmtryData.envlp.senderBankId = senderBankId;
+    }
+
+    public String getReceiverBankId() {
+        return tx().cdtrAgt.finInstnId.bicfi;
+    }
+
+    public void setReceiverBankId(String receiverBankId) {
+        tx().cdtrAgt.finInstnId.bicfi = receiverBankId;
+        tx().splmtryData.envlp.receiverBankId = receiverBankId;
+    }
+
+    public String getSenderAccount() {
+        return tx().dbtrAcct.id.iban;
+    }
+
+    public void setSenderAccount(String senderAccount) {
+        tx().dbtrAcct.id.iban = senderAccount;
+    }
+
+    public String getReceiverAccount() {
+        return tx().cdtrAcct.id.iban;
+    }
+
+    public void setReceiverAccount(String receiverAccount) {
+        tx().cdtrAcct.id.iban = receiverAccount;
+    }
+
+    public String getSenderName() {
+        return tx().dbtr.nm;
+    }
+
+    public void setSenderName(String senderName) {
+        tx().dbtr.nm = senderName;
+    }
+
+    public String getReceiverName() {
+        return tx().cdtr.nm;
+    }
+
+    public void setReceiverName(String receiverName) {
+        tx().cdtr.nm = receiverName;
+    }
+
+    public String getTitle() {
+        return tx().rmtInf.ustrd;
+    }
+
+    public void setTitle(String title) {
+        tx().rmtInf.ustrd = title;
+    }
+
+    /**
+     * Kod serwisu źródłowego: ELIXIR, ELIXIR_EXPRESS lub SORBNET
+     * (dodatkowa identyfikacja, z jakiego serwisu pochodzi przelew).
+     */
+    public String getType() {
+        return tx().splmtryData.envlp.serviceCode;
+    }
+
+    public void setType(String type) {
+        tx().splmtryData.envlp.serviceCode = type;
+        grpHdr().sttlmInf.clrSys.cd = type;
+    }
+
+    public FIToFICustomerCreditTransfer getFiToFICstmrCdtTrf() {
+        return fiToFICstmrCdtTrf;
+    }
+
+    public void setFiToFICstmrCdtTrf(FIToFICustomerCreditTransfer fiToFICstmrCdtTrf) {
+        this.fiToFICstmrCdtTrf = fiToFICstmrCdtTrf;
+    }
+
+    private GroupHeader grpHdr() {
+        if (fiToFICstmrCdtTrf == null) {
+            fiToFICstmrCdtTrf = new FIToFICustomerCreditTransfer();
+        }
+
+        if (fiToFICstmrCdtTrf.grpHdr == null) {
+            fiToFICstmrCdtTrf.grpHdr = new GroupHeader();
+        }
+
+        return fiToFICstmrCdtTrf.grpHdr;
+    }
+
+    private CreditTransferTransactionInformation tx() {
+        if (fiToFICstmrCdtTrf == null) {
+            fiToFICstmrCdtTrf = new FIToFICustomerCreditTransfer();
+        }
+
+        if (fiToFICstmrCdtTrf.cdtTrfTxInf == null) {
+            fiToFICstmrCdtTrf.cdtTrfTxInf = new CreditTransferTransactionInformation();
+        }
+
+        return fiToFICstmrCdtTrf.cdtTrfTxInf;
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class FIToFICustomerCreditTransfer {
+
+        @XmlElement(name = "GrpHdr")
+        private GroupHeader grpHdr = new GroupHeader();
+
+        @XmlElement(name = "CdtTrfTxInf")
+        private CreditTransferTransactionInformation cdtTrfTxInf = new CreditTransferTransactionInformation();
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class GroupHeader {
+
+        @XmlElement(name = "MsgId")
+        private String msgId;
+
+        @XmlElement(name = "CreDtTm")
+        private String creDtTm;
+
+        @XmlElement(name = "NbOfTxs")
+        private String nbOfTxs = "1";
+
+        @XmlElement(name = "TtlIntrBkSttlmAmt")
+        private ActiveCurrencyAndAmount ttlIntrBkSttlmAmt = new ActiveCurrencyAndAmount();
+
+        @XmlElement(name = "SttlmInf")
+        private SettlementInformation sttlmInf = new SettlementInformation();
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class SettlementInformation {
+
+        @XmlElement(name = "SttlmMtd")
+        private String sttlmMtd = "CLRG";
+
+        @XmlElement(name = "ClrSys")
+        private ClearingSystemIdentification clrSys = new ClearingSystemIdentification();
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class ClearingSystemIdentification {
+
+        @XmlElement(name = "Cd")
+        private String cd = "SORBNET";
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class CreditTransferTransactionInformation {
+
+        @XmlElement(name = "PmtId")
+        private PaymentIdentification pmtId = new PaymentIdentification();
+
+        @XmlElement(name = "IntrBkSttlmAmt")
+        private ActiveCurrencyAndAmount intrBkSttlmAmt = new ActiveCurrencyAndAmount();
+
+        @XmlElement(name = "Dbtr")
+        private PartyIdentification dbtr = new PartyIdentification();
+
+        @XmlElement(name = "DbtrAcct")
+        private CashAccount dbtrAcct = new CashAccount();
+
+        @XmlElement(name = "DbtrAgt")
+        private BranchAndFinancialInstitutionIdentification dbtrAgt =
+                new BranchAndFinancialInstitutionIdentification();
+
+        @XmlElement(name = "Cdtr")
+        private PartyIdentification cdtr = new PartyIdentification();
+
+        @XmlElement(name = "CdtrAcct")
+        private CashAccount cdtrAcct = new CashAccount();
+
+        @XmlElement(name = "CdtrAgt")
+        private BranchAndFinancialInstitutionIdentification cdtrAgt =
+                new BranchAndFinancialInstitutionIdentification();
+
+        @XmlElement(name = "RmtInf")
+        private RemittanceInformation rmtInf = new RemittanceInformation();
+
+        @XmlElement(name = "SplmtryData")
+        private SupplementaryData splmtryData = new SupplementaryData();
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class PaymentIdentification {
+
+        @XmlElement(name = "InstrId")
+        private String instrId;
+
+        @XmlElement(name = "EndToEndId")
+        private String endToEndId;
+
+        @XmlElement(name = "TxId")
+        private String txId;
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class ActiveCurrencyAndAmount {
+
+        @XmlAttribute(name = "Ccy")
+        private String currency;
+
+        @XmlValue
+        private BigDecimal value;
+
+        public ActiveCurrencyAndAmount() {
+        }
+
+        public ActiveCurrencyAndAmount(String currency, BigDecimal value) {
+            this.currency = currency;
+            this.value = value;
+        }
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class PartyIdentification {
+
+        @XmlElement(name = "Nm")
+        private String nm;
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class BranchAndFinancialInstitutionIdentification {
+
+        @XmlElement(name = "FinInstnId")
+        private FinancialInstitutionIdentification finInstnId =
+                new FinancialInstitutionIdentification();
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class FinancialInstitutionIdentification {
+
+        @XmlElement(name = "BICFI")
+        private String bicfi;
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class CashAccount {
+
+        @XmlElement(name = "Id")
+        private AccountIdentification id = new AccountIdentification();
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class AccountIdentification {
+
+        @XmlElement(name = "IBAN")
+        private String iban;
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class RemittanceInformation {
+
+        @XmlElement(name = "Ustrd")
+        private String ustrd;
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class SupplementaryData {
+
+        @XmlElement(name = "Envlp")
+        private Envelope envlp = new Envelope();
+    }
+
+    @XmlAccessorType(XmlAccessType.NONE)
+    public static class Envelope {
+
+        @XmlElement(name = "ServiceCode")
+        private String serviceCode = "SORBNET";
+
+        @XmlElement(name = "SenderBankId")
+        private String senderBankId;
+
+        @XmlElement(name = "ReceiverBankId")
+        private String receiverBankId;
+    }
 }

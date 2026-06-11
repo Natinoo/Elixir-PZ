@@ -16,51 +16,62 @@ public class AlertWebSocketController {
     private final SimpMessagingTemplate ws;
 
     public AlertWebSocketController(BankAccountRepository accountRepo,
-                                     SimpMessagingTemplate ws) {
+                                    SimpMessagingTemplate ws) {
         this.accountRepo = accountRepo;
         this.ws = ws;
     }
 
-    // GUI wysyła /app/alerts/{bankId} → dostaje aktualny stan
-    /**
-     * GUI banku wysyła zapytanie przy załadowaniu strony:
-     *   stompClient.send("/app/alerts/PKO", {}, "")
-     *
-     * Serwer odpowiada aktualnym stanem konta na topiku:
-     *   /topic/alerts/{bankId}
-     *
-     * Dzięki temu GUI nie potrzebuje osobnego REST endpoint —
-     * wszystko idzie przez jedno połączenie WebSocket.
-     */
     @MessageMapping("/alerts/{bankId}")
-    public void getAlert(@DestinationVariable String bankId) {
-        BankAccount bank = accountRepo.findById(bankId).orElseThrow();
+public void getAlert(@DestinationVariable String bankId) {
+    BankAccount bank = accountRepo
+            .findByServiceCodeAndBankId("SORBNET", bankId)
+            .orElse(null);
 
-        boolean overlimit = bank.getBalance()
-                .compareTo(bank.getDebtLimit().negate()) < 0;
+    if (bank == null) {
+        ws.convertAndSend("/topic/alerts/" + bankId, Map.of(
+                "alert", false,
+                "type", "BANK_NOT_FOUND",
+                "message", "Nieznany bank: " + bankId
+        ));
+        return;
+    }
 
-        Map<String, Object> response;
+    boolean overlimit = bank.getBalance()
+            .compareTo(bank.getDebtLimit().negate()) < 0;
 
-        if (bank.isBlocked()) {
-            response = Map.of(
+    Map<String, Object> response;
+
+    if (bank.isBlocked()) {
+        response = Map.of(
                 "alert", true,
                 "type", "BANK_BLOCKED",
-                "balance", bank.getBalance(),
-                "debtLimit", bank.getDebtLimit()
-            );
-        } else if (overlimit) {
-            response = Map.of(
-                "alert", true,
-                "type", "DEBT_LIMIT_EXCEEDED",
+                "bankId", bank.getBankId(),
+                "bankName", bank.getBankName(),
                 "balance", bank.getBalance(),
                 "debtLimit", bank.getDebtLimit(),
-                "overlimitSince", bank.getOverlimitSince().toString()
-            );
-        } else {
-            response = Map.of("alert", false, "balance", bank.getBalance());
-        }
-
-        // odpowiedź idzie z powrotem do topiku tego banku
-        ws.convertAndSend("/topic/alerts/" + bankId, response);
+                "blockedAt", bank.getBlockedAt() != null
+                        ? bank.getBlockedAt().toString() : ""
+        );
+    } else if (overlimit) {
+        response = Map.of(
+                "alert", true,
+                "type", "DEBT_LIMIT_EXCEEDED",
+                "bankId", bank.getBankId(),
+                "bankName", bank.getBankName(),
+                "balance", bank.getBalance(),
+                "debtLimit", bank.getDebtLimit(),
+                "overlimitSince", bank.getOverlimitSince() != null
+                        ? bank.getOverlimitSince().toString() : ""
+        );
+    } else {
+        response = Map.of(
+                "alert", false,
+                "bankId", bank.getBankId(),
+                "bankName", bank.getBankName(),
+                "balance", bank.getBalance()
+        );
     }
+
+    ws.convertAndSend("/topic/alerts/" + bankId, response);
+}
 }

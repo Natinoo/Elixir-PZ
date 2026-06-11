@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import pl.pz.sorbnet.model.BankAccount;
+import jakarta.servlet.http.HttpServletRequest;
 import pl.pz.sorbnet.repository.BankAccountRepository;
 import pl.pz.sorbnet.service.SorbnetPaymentService;
 
@@ -140,14 +141,14 @@ public class AccountController {
             content = @Content
         )
     })
-    @GetMapping("/{bankId}")
+        @GetMapping("/{bankId}")
     public BankAccount get(
             @Parameter(
                 description = "Unikalny identyfikator banku uczestniczącego w systemie.",
                 example = "BANK_A"
             )
             @PathVariable String bankId) {
-        return accountRepo.findById(bankId)
+        return accountRepo.findByServiceCodeAndBankId("SORBNET", bankId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Nie znaleziono banku: " + bankId));
     }
