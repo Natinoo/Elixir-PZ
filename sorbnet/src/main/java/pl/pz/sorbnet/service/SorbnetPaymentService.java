@@ -7,7 +7,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import jakarta.servlet.http.HttpServletRequest;
 import pl.pz.sorbnet.dto.SorbnetPaymentDto;
 import pl.pz.sorbnet.model.*;
 import pl.pz.sorbnet.repository.*;
@@ -60,22 +60,20 @@ public class SorbnetPaymentService {
                 "message", "Przelew już przetworzony (idempotent)"
             );
         }
-        BankAccount sender = accountRepo.findById(dto.getSenderBankId())
-                .orElseThrow(() -> new RuntimeException("Nieznany bank: " + dto.getSenderBankId()));
-        BankAccount receiver = accountRepo.findById(dto.getReceiverBankId())
-                .orElseThrow(() -> new RuntimeException("Nieznany bank: " + dto.getReceiverBankId()));
-        BankSettlementAccount senderSettlementAccount = bankSettlementAccountRepository
-        .findByAccountNumber(dto.getSenderAccount())
-        .orElseThrow(() -> new RuntimeException("Nieznany rachunek nadawcy: " + dto.getSenderAccount()));
+        // jedno zapytanie po numerze rachunku
+        BankAccount sender = accountRepo
+                .findByServiceCodeAndAccountNumber("SORBNET", dto.getSenderAccount())
+                .orElseThrow(() -> new RuntimeException("Nieznany rachunek nadawcy: " + dto.getSenderAccount()));
 
-        BankSettlementAccount receiverSettlementAccount = bankSettlementAccountRepository
-        .findByAccountNumber(dto.getReceiverAccount())
-        .orElseThrow(() -> new RuntimeException("Nieznany rachunek odbiorcy: " + dto.getReceiverAccount()));
+        BankAccount receiver = accountRepo
+                .findByServiceCodeAndAccountNumber("SORBNET", dto.getReceiverAccount())
+                .orElseThrow(() -> new RuntimeException("Nieznany rachunek odbiorcy: " + dto.getReceiverAccount()));
 
-        if (!senderSettlementAccount.getBankId().equals(dto.getSenderBankId())) {
+        // walidacja czy rachunek należy do właściwego banku
+        if (!sender.getBankId().equals(dto.getSenderBankId())) {
             return reject(dto, "SENDER_ACCOUNT_MISMATCH");
         }
-        if (!receiverSettlementAccount.getBankId().equals(dto.getReceiverBankId())) {
+        if (!receiver.getBankId().equals(dto.getReceiverBankId())) {
             return reject(dto, "RECEIVER_ACCOUNT_MISMATCH");
         }
 
@@ -129,7 +127,7 @@ public class SorbnetPaymentService {
     }
 
     public Map<String, Object> simulateDeposit(String targetBankId, BigDecimal amount, String sourceBankId) {
-        BankAccount target = accountRepo.findById(targetBankId)
+        BankAccount target = accountRepo.findByServiceCodeAndBankId("SORBNET", targetBankId)
             .orElseThrow(() -> new RuntimeException("Nieznany bank: " + targetBankId));
 
         BigDecimal before = target.getBalance();
@@ -172,7 +170,7 @@ public class SorbnetPaymentService {
     }
 
     public Map<String, Object> getAccountStatus(String bankId) {
-        BankAccount bank = accountRepo.findById(bankId)
+        BankAccount bank = accountRepo.findByServiceCodeAndBankId("SORBNET", bankId)
             .orElseThrow(() -> new RuntimeException("Nieznany bank: " + bankId));
     
         BigDecimal available = bank.getBalance().add(bank.getDebtLimit());
