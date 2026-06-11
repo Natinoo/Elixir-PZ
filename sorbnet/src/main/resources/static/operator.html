@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SORBNET — panel operatora</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">SORBNET</span>
+    <span class="brand-sub">RTGS · panel operatora systemu</span>
+  </div>
+  <div class="topbar-right">
+    <a class="panel-link" href="index.html">→ panel banku</a>
+    <span id="wsDot" class="ws-dot" title="Połączenie czasu rzeczywistego">●</span>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="accounts">Rachunki banków</button>
+  <button class="tab" data-tab="payments">Transakcje</button>
+  <button class="tab" data-tab="netting">Netting i płynność</button>
+  <button class="tab" data-tab="gridlock">Gridlock <span id="gridlockBadge" class="badge" hidden></span></button>
+  <button class="tab" data-tab="emergency">Sytuacje nadzwyczajne <span id="emergencyBadge" class="badge" hidden></span></button>
+</nav>
+
+<main class="op-main">
+
+  <!-- Rachunki rozliczeniowe + blokady -->
+  <section class="tab-pane active" id="pane-accounts">
+    <p class="hint">Stan rachunków rozliczeniowych i limity zadłużenia. Blokada wyklucza bank z rozrachunku — nie może wysyłać ani odbierać przelewów.</p>
+    <table class="payments">
+      <thead>
+        <tr>
+          <th>Bank</th><th>Nazwa</th><th class="num">Saldo</th><th class="num">Limit zadłużenia</th>
+          <th class="num">Dostępne</th><th>Ponad limitem od</th><th>Status</th><th>Akcja</th>
+        </tr>
+      </thead>
+      <tbody id="accountsBody"><tr><td colspan="8" class="empty">Ładowanie…</td></tr></tbody>
+    </table>
+  </section>
+
+  <!-- Transakcje -->
+  <section class="tab-pane" id="pane-payments">
+    <div class="card-head">
+      <label class="date-filter">zakres
+        <select id="payRange">
+          <option value="today">przyjęte dzisiaj</option>
+          <option value="all">pełna historia</option>
+        </select>
+      </label>
+      <label class="date-filter">status
+        <select id="payStatus">
+          <option value="">wszystkie</option>
+          <option value="SETTLED">SETTLED</option>
+          <option value="GRIDLOCK_HELD">GRIDLOCK_HELD</option>
+          <option value="REJECTED">REJECTED</option>
+        </select>
+      </label>
+      <label class="date-filter">bank
+        <select id="payBank"><option value="">wszystkie</option></select>
+      </label>
+    </div>
+    <table class="payments">
+      <thead>
+        <tr>
+          <th>ID</th><th>Nadawca</th><th>Odbiorca</th><th>Tytuł</th><th>Serwis</th>
+          <th class="num">Kwota</th><th>Status</th><th>Utworzono</th><th>Rozliczono</th>
+        </tr>
+      </thead>
+      <tbody id="paymentsBody"><tr><td colspan="9" class="empty">Ładowanie…</td></tr></tbody>
+    </table>
+  </section>
+
+  <!-- Netting i płynność -->
+  <section class="tab-pane" id="pane-netting">
+    <h2 class="pane-title">Rozrachunki z systemów ELIXIR</h2>
+    <p class="hint">Przelewy, które trafiły do SORBNET z systemów sesyjnych (wyniki nettingu i zasilenia płynnościowe), rozpoznawane po serwisie źródłowym.</p>
+    <table class="payments">
+      <thead>
+        <tr>
+          <th>ID</th><th>Serwis</th><th>Nadawca</th><th>Odbiorca</th><th>Tytuł</th>
+          <th class="num">Kwota</th><th>Status</th><th>Rozliczono</th>
+        </tr>
+      </thead>
+      <tbody id="nettingBody"><tr><td colspan="8" class="empty">Ładowanie…</td></tr></tbody>
+    </table>
+
+    <h2 class="pane-title">Wnioski o płynność — pełna historia</h2>
+    <table class="payments">
+      <thead>
+        <tr>
+          <th>ReqId</th><th>Sesja</th><th>Bank</th><th>Serwis</th>
+          <th class="num">Kwota</th><th>Status</th><th>Otrzymano</th><th>Przetworzono</th>
+        </tr>
+      </thead>
+      <tbody id="liqHistoryBody"><tr><td colspan="8" class="empty">Ładowanie…</td></tr></tbody>
+    </table>
+  </section>
+
+  <!-- Gridlock -->
+  <section class="tab-pane" id="pane-gridlock">
+    <h2 class="pane-title">Przelewy wstrzymane w kolejce gridlock (wewnątrz SORBNET)</h2>
+    <p class="hint">Gridlock resolution działa automatycznie — przelewy znikają z kolejki po odzyskaniu płynności przez bank-nadawcę.</p>
+    <table class="payments">
+      <thead>
+        <tr>
+          <th>ID</th><th>Nadawca</th><th>Odbiorca</th><th>Tytuł</th>
+          <th class="num">Kwota</th><th>Utworzono</th>
+        </tr>
+      </thead>
+      <tbody id="gridlockBody"><tr><td colspan="6" class="empty">Ładowanie…</td></tr></tbody>
+    </table>
+
+    <h2 class="pane-title">Sesje ELIXIR czekające na upłynnienie</h2>
+    <p class="hint">Oczekujące wnioski o płynność — decyzję podejmuje pracownik danego banku w panelu banku.</p>
+    <table class="payments">
+      <thead>
+        <tr>
+          <th>ReqId</th><th>Sesja</th><th>Bank</th><th>Serwis</th>
+          <th class="num">Brakująca kwota</th><th>Czeka od</th>
+        </tr>
+      </thead>
+      <tbody id="liqPendingBody"><tr><td colspan="6" class="empty">Ładowanie…</td></tr></tbody>
+    </table>
+  </section>
+
+  <!-- Emergency -->
+  <section class="tab-pane" id="pane-emergency">
+    <h2 class="pane-title">Banki w stanie alarmowym</h2>
+    <p class="hint">Banki ponad limitem zadłużenia lub zablokowane — wymagają uzupełnienia środków, a po 2 h od przekroczenia limitu następuje automatyczna blokada.</p>
+    <table class="payments">
+      <thead>
+        <tr>
+          <th>Bank</th><th class="num">Saldo</th><th class="num">Limit zadłużenia</th>
+          <th class="num">Brakuje do limitu</th><th>Ponad limitem od</th><th>Status</th><th>Akcja</th>
+        </tr>
+      </thead>
+      <tbody id="emergencyBody"><tr><td colspan="7" class="empty">Ładowanie…</td></tr></tbody>
+    </table>
+
+    <h2 class="pane-title">Zdarzenia na żywo</h2>
+    <div id="eventLog" class="event-log"><p class="empty">Nasłuch zdarzeń emergency, gridlock i płynnościowych…</p></div>
+  </section>
+
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+<script src="operator.js"></script>
+</body>
+</html>

@@ -35,8 +35,14 @@ import java.util.Map;
     produces = MediaType.APPLICATION_XML_VALUE
 )
 @Tag(
-    name = "SORBNet Payments XML",
-    description = "XML-only API do wysyłania przelewów, pobierania historii oraz sprawdzania szczegółów płatności w systemie SORBNet."
+    name = "SORBNet Payments ISO 20022",
+    description = """
+        XML-only API systemu SORBNet zgodne ze standardem ISO 20022.
+        Zlecenia przelewów przyjmowane są jako komunikaty pacs.008-style
+        (FIToFICstmrCdtTrf), a odpowiedzi zwracane jako raporty statusu
+        pain.002-style (CstmrPmtStsRpt). Wszystkie komunikaty mają element
+        główny Document.
+        """
 )
 public class SorbnetPaymentController {
 
@@ -50,80 +56,120 @@ public class SorbnetPaymentController {
     }
 
     @Operation(
-        summary = "Wyślij przelew SORBNet",
+        summary = "Wyślij przelew SORBNet (pacs.008)",
         description = """
-            Endpoint przyjmuje zlecenie przelewu wyłącznie w formacie XML.
-            Odpowiedź również zwracana jest wyłącznie jako XML.
-            Możliwe statusy odpowiedzi to SETTLED, REJECTED oraz GRIDLOCK_HELD.
+            Endpoint przyjmuje zlecenie przelewu wyłącznie jako komunikat ISO 20022
+            pacs.008-style z elementem głównym Document. Identyfikacja banków odbywa się
+            przez BICFI (DbtrAgt/CdtrAgt), rachunków przez IBAN (DbtrAcct/CdtrAcct),
+            a serwis źródłowy przekazywany jest w SplmtryData/Envlp/ServiceCode
+            (SORBNET, ELIXIR lub ELIXIR_EXPRESS).
+            Odpowiedź zwracana jest jako raport statusu pain.002-style (CstmrPmtStsRpt).
+            Możliwe statusy (TxSts) to SETTLED, REJECTED oraz GRIDLOCK_HELD.
             """
     )
     @ApiResponses({
         @ApiResponse(
             responseCode = "200",
-            description = "Przelew został przetworzony i zwrócono wynik operacji w XML.",
+            description = "Przelew został przetworzony i zwrócono raport statusu ISO 20022.",
             content = @Content(
                 mediaType = MediaType.APPLICATION_XML_VALUE,
                 schema = @Schema(implementation = PaymentResponseDto.class),
                 examples = {
                     @ExampleObject(
-                        name = "Rozliczony",
+                        name = "Rozliczony (SETTLED)",
                         value = """
-                            <SorbnetPaymentResponse>
-                                <paymentId>SORB-20260609-0001</paymentId>
-                                <status>SETTLED</status>
-                                <message>Przelew został rozliczony</message>
-                                <senderBankId>BANK_A</senderBankId>
-                                <receiverBankId>BANK_B</receiverBankId>
-                                <senderAccount>11111100000000000000000001</senderAccount>
-                                <receiverAccount>22222200000000000000000002</receiverAccount>
-                                <amount>1000000.00</amount>
-                                <settledAt>2026-06-09T13:00:00</settledAt>
-                            </SorbnetPaymentResponse>
+                            <Document>
+                                <CstmrPmtStsRpt>
+                                    <GrpHdr>
+                                        <MsgId>RESP-SORB-20260611-0001</MsgId>
+                                        <CreDtTm>2026-06-11T13:00:01</CreDtTm>
+                                    </GrpHdr>
+                                    <OrgnlPmtInfAndSts>
+                                        <OrgnlPmtInfId>SORB-20260611-0001</OrgnlPmtInfId>
+                                        <TxInfAndSts>
+                                            <OrgnlInstrId>SORB-20260611-0001</OrgnlInstrId>
+                                            <OrgnlTxId>SORB-20260611-0001</OrgnlTxId>
+                                            <TxSts>SETTLED</TxSts>
+                                            <StsRsnInf>
+                                                <AddtlInf>Przelew został rozliczony</AddtlInf>
+                                            </StsRsnInf>
+                                            <OrgnlTxRef>
+                                                <IntrBkSttlmAmt Ccy="PLN">1000000.00</IntrBkSttlmAmt>
+                                                <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
+                                                <CdtrAgt><FinInstnId><BICFI>BANK_B</BICFI></FinInstnId></CdtrAgt>
+                                                <DbtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></DbtrAcct>
+                                                <CdtrAcct><Id><IBAN>22222200000000000000000002</IBAN></Id></CdtrAcct>
+                                                <SplmtryData><Envlp><SourceServiceCode>SORBNET</SourceServiceCode></Envlp></SplmtryData>
+                                            </OrgnlTxRef>
+                                            <SettledAt>2026-06-11T13:00:01</SettledAt>
+                                        </TxInfAndSts>
+                                    </OrgnlPmtInfAndSts>
+                                </CstmrPmtStsRpt>
+                            </Document>
                             """
                     ),
                     @ExampleObject(
-                        name = "Idempotent",
+                        name = "Gridlock (GRIDLOCK_HELD)",
                         value = """
-                            <SorbnetPaymentResponse>
-                                <paymentId>SORB-20260609-0001</paymentId>
-                                <status>SETTLED</status>
-                                <message>Przelew już przetworzony (idempotent)</message>
-                                <senderBankId>BANK_A</senderBankId>
-                                <receiverBankId>BANK_B</receiverBankId>
-                                <senderAccount>11111100000000000000000001</senderAccount>
-                                <receiverAccount>22222200000000000000000002</receiverAccount>
-                                <amount>1000000.00</amount>
-                            </SorbnetPaymentResponse>
+                            <Document>
+                                <CstmrPmtStsRpt>
+                                    <GrpHdr>
+                                        <MsgId>RESP-SORB-20260611-0002</MsgId>
+                                        <CreDtTm>2026-06-11T13:05:00</CreDtTm>
+                                    </GrpHdr>
+                                    <OrgnlPmtInfAndSts>
+                                        <OrgnlPmtInfId>SORB-20260611-0002</OrgnlPmtInfId>
+                                        <TxInfAndSts>
+                                            <OrgnlInstrId>SORB-20260611-0002</OrgnlInstrId>
+                                            <OrgnlTxId>SORB-20260611-0002</OrgnlTxId>
+                                            <TxSts>GRIDLOCK_HELD</TxSts>
+                                            <StsRsnInf>
+                                                <AddtlInf>Payment held in gridlock queue</AddtlInf>
+                                            </StsRsnInf>
+                                            <OrgnlTxRef>
+                                                <IntrBkSttlmAmt Ccy="PLN">8000000.00</IntrBkSttlmAmt>
+                                                <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
+                                                <CdtrAgt><FinInstnId><BICFI>BANK_C</BICFI></FinInstnId></CdtrAgt>
+                                                <DbtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></DbtrAcct>
+                                                <CdtrAcct><Id><IBAN>33333300000000000000000003</IBAN></Id></CdtrAcct>
+                                                <SplmtryData><Envlp><SourceServiceCode>SORBNET</SourceServiceCode></Envlp></SplmtryData>
+                                            </OrgnlTxRef>
+                                        </TxInfAndSts>
+                                    </OrgnlPmtInfAndSts>
+                                </CstmrPmtStsRpt>
+                            </Document>
                             """
                     ),
                     @ExampleObject(
-                        name = "Gridlock",
+                        name = "Odrzucony — bank zablokowany (REJECTED)",
                         value = """
-                            <SorbnetPaymentResponse>
-                                <paymentId>SORB-20260609-0002</paymentId>
-                                <status>GRIDLOCK_HELD</status>
-                                <message>Przelew został wstrzymany w kolejce gridlock</message>
-                                <senderBankId>BANK_A</senderBankId>
-                                <receiverBankId>BANK_C</receiverBankId>
-                                <senderAccount>11111100000000000000000001</senderAccount>
-                                <receiverAccount>33333300000000000000000003</receiverAccount>
-                                <amount>8000000.00</amount>
-                            </SorbnetPaymentResponse>
-                            """
-                    ),
-                    @ExampleObject(
-                        name = "Odrzucony — bank zablokowany",
-                        value = """
-                            <SorbnetPaymentResponse>
-                                <paymentId>SORB-20260609-0003</paymentId>
-                                <status>REJECTED</status>
-                                <message>SENDER_BLOCKED</message>
-                                <senderBankId>BANK_A</senderBankId>
-                                <receiverBankId>BANK_B</receiverBankId>
-                                <senderAccount>11111100000000000000000001</senderAccount>
-                                <receiverAccount>22222200000000000000000002</receiverAccount>
-                                <amount>500000.00</amount>
-                            </SorbnetPaymentResponse>
+                            <Document>
+                                <CstmrPmtStsRpt>
+                                    <GrpHdr>
+                                        <MsgId>RESP-SORB-20260611-0003</MsgId>
+                                        <CreDtTm>2026-06-11T13:10:00</CreDtTm>
+                                    </GrpHdr>
+                                    <OrgnlPmtInfAndSts>
+                                        <OrgnlPmtInfId>SORB-20260611-0003</OrgnlPmtInfId>
+                                        <TxInfAndSts>
+                                            <OrgnlInstrId>SORB-20260611-0003</OrgnlInstrId>
+                                            <OrgnlTxId>SORB-20260611-0003</OrgnlTxId>
+                                            <TxSts>REJECTED</TxSts>
+                                            <StsRsnInf>
+                                                <AddtlInf>SENDER_BLOCKED</AddtlInf>
+                                            </StsRsnInf>
+                                            <OrgnlTxRef>
+                                                <IntrBkSttlmAmt Ccy="PLN">500000.00</IntrBkSttlmAmt>
+                                                <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
+                                                <CdtrAgt><FinInstnId><BICFI>BANK_B</BICFI></FinInstnId></CdtrAgt>
+                                                <DbtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></DbtrAcct>
+                                                <CdtrAcct><Id><IBAN>22222200000000000000000002</IBAN></Id></CdtrAcct>
+                                                <SplmtryData><Envlp><SourceServiceCode>SORBNET</SourceServiceCode></Envlp></SplmtryData>
+                                            </OrgnlTxRef>
+                                        </TxInfAndSts>
+                                    </OrgnlPmtInfAndSts>
+                                </CstmrPmtStsRpt>
+                            </Document>
                             """
                     )
                 }
@@ -131,12 +177,12 @@ public class SorbnetPaymentController {
         ),
         @ApiResponse(
             responseCode = "400",
-            description = "Niepoprawna struktura XML lub błędne dane wejściowe.",
+            description = "Niepoprawna struktura komunikatu ISO 20022 (np. brak elementu Document/FIToFICstmrCdtTrf) lub błędne dane wejściowe.",
             content = @Content
         ),
         @ApiResponse(
             responseCode = "404",
-            description = "Nie znaleziono wskazanego banku lub rachunku.",
+            description = "Nie znaleziono wskazanego banku (BICFI) lub rachunku (IBAN).",
             content = @Content
         ),
         @ApiResponse(
@@ -149,7 +195,7 @@ public class SorbnetPaymentController {
     public ResponseEntity<PaymentResponseDto> send(
             @RequestBody(
                 required = true,
-                description = "Żądanie przelewu w formacie XML.",
+                description = "Zlecenie przelewu w formacie ISO 20022 pacs.008-style (root Document).",
                 content = @Content(
                     mediaType = MediaType.APPLICATION_XML_VALUE,
                     schema = @Schema(implementation = SorbnetPaymentDto.class),
@@ -157,65 +203,118 @@ public class SorbnetPaymentController {
                         @ExampleObject(
                             name = "BANK_A → BANK_B (standardowy)",
                             value = """
-                                <SorbnetPaymentRequest>
-                                    <paymentId>SORB-20260609-0001</paymentId>
-                                    <amount>1000000.00</amount>
-                                    <currency>PLN</currency>
-                                    <senderBankId>BANK_A</senderBankId>
-                                    <receiverBankId>BANK_B</receiverBankId>
-                                    <senderAccount>11111100000000000000000001</senderAccount>
-                                    <receiverAccount>22222200000000000000000002</receiverAccount>
-                                    <title>Rozrachunek międzybankowy</title>
-                                    <status>NEW</status>
-                                </SorbnetPaymentRequest>
+                                <Document>
+                                    <FIToFICstmrCdtTrf>
+                                        <GrpHdr>
+                                            <MsgId>SORB-20260611-0001</MsgId>
+                                            <CreDtTm>2026-06-11T13:00:00</CreDtTm>
+                                            <NbOfTxs>1</NbOfTxs>
+                                            <TtlIntrBkSttlmAmt Ccy="PLN">1000000.00</TtlIntrBkSttlmAmt>
+                                            <SttlmInf>
+                                                <SttlmMtd>CLRG</SttlmMtd>
+                                                <ClrSys><Cd>SORBNET</Cd></ClrSys>
+                                            </SttlmInf>
+                                        </GrpHdr>
+                                        <CdtTrfTxInf>
+                                            <PmtId>
+                                                <InstrId>SORB-20260611-0001</InstrId>
+                                                <EndToEndId>SORB-20260611-0001</EndToEndId>
+                                                <TxId>SORB-20260611-0001</TxId>
+                                            </PmtId>
+                                            <IntrBkSttlmAmt Ccy="PLN">1000000.00</IntrBkSttlmAmt>
+                                            <DbtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></DbtrAcct>
+                                            <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
+                                            <CdtrAcct><Id><IBAN>22222200000000000000000002</IBAN></Id></CdtrAcct>
+                                            <CdtrAgt><FinInstnId><BICFI>BANK_B</BICFI></FinInstnId></CdtrAgt>
+                                            <RmtInf><Ustrd>Rozrachunek międzybankowy</Ustrd></RmtInf>
+                                            <SplmtryData>
+                                                <Envlp>
+                                                    <ServiceCode>SORBNET</ServiceCode>
+                                                    <SenderBankId>BANK_A</SenderBankId>
+                                                    <ReceiverBankId>BANK_B</ReceiverBankId>
+                                                </Envlp>
+                                            </SplmtryData>
+                                        </CdtTrfTxInf>
+                                    </FIToFICstmrCdtTrf>
+                                </Document>
                                 """
                         ),
                         @ExampleObject(
                             name = "BANK_A → BANK_C (gridlock — kwota powyżej limitu)",
                             value = """
-                                <SorbnetPaymentRequest>
-                                    <paymentId>SORB-20260609-0002</paymentId>
-                                    <amount>8000000.00</amount>
-                                    <currency>PLN</currency>
-                                    <senderBankId>BANK_A</senderBankId>
-                                    <receiverBankId>BANK_C</receiverBankId>
-                                    <senderAccount>11111100000000000000000001</senderAccount>
-                                    <receiverAccount>33333300000000000000000003</receiverAccount>
-                                    <title>Duży przelew rozrachunkowy</title>
-                                    <status>NEW</status>
-                                </SorbnetPaymentRequest>
-                                """
-                        ),
-                        @ExampleObject(
-                            name = "BANK_B → BANK_C (rachunek pomocniczy)",
-                            value = """
-                                <SorbnetPaymentRequest>
-                                    <paymentId>SORB-20260609-0003</paymentId>
-                                    <amount>500000.00</amount>
-                                    <currency>PLN</currency>
-                                    <senderBankId>BANK_B</senderBankId>
-                                    <receiverBankId>BANK_C</receiverBankId>
-                                    <senderAccount>22222200000000000000000003</senderAccount>
-                                    <receiverAccount>33333300000000000000000003</receiverAccount>
-                                    <title>Przelew pomocniczy</title>
-                                    <status>NEW</status>
-                                </SorbnetPaymentRequest>
+                                <Document>
+                                    <FIToFICstmrCdtTrf>
+                                        <GrpHdr>
+                                            <MsgId>SORB-20260611-0002</MsgId>
+                                            <CreDtTm>2026-06-11T13:05:00</CreDtTm>
+                                            <NbOfTxs>1</NbOfTxs>
+                                            <TtlIntrBkSttlmAmt Ccy="PLN">8000000.00</TtlIntrBkSttlmAmt>
+                                            <SttlmInf>
+                                                <SttlmMtd>CLRG</SttlmMtd>
+                                                <ClrSys><Cd>SORBNET</Cd></ClrSys>
+                                            </SttlmInf>
+                                        </GrpHdr>
+                                        <CdtTrfTxInf>
+                                            <PmtId>
+                                                <InstrId>SORB-20260611-0002</InstrId>
+                                                <EndToEndId>SORB-20260611-0002</EndToEndId>
+                                                <TxId>SORB-20260611-0002</TxId>
+                                            </PmtId>
+                                            <IntrBkSttlmAmt Ccy="PLN">8000000.00</IntrBkSttlmAmt>
+                                            <DbtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></DbtrAcct>
+                                            <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
+                                            <CdtrAcct><Id><IBAN>33333300000000000000000003</IBAN></Id></CdtrAcct>
+                                            <CdtrAgt><FinInstnId><BICFI>BANK_C</BICFI></FinInstnId></CdtrAgt>
+                                            <RmtInf><Ustrd>Duży przelew rozrachunkowy</Ustrd></RmtInf>
+                                            <SplmtryData>
+                                                <Envlp>
+                                                    <ServiceCode>SORBNET</ServiceCode>
+                                                    <SenderBankId>BANK_A</SenderBankId>
+                                                    <ReceiverBankId>BANK_C</ReceiverBankId>
+                                                </Envlp>
+                                            </SplmtryData>
+                                        </CdtTrfTxInf>
+                                    </FIToFICstmrCdtTrf>
+                                </Document>
                                 """
                         ),
                         @ExampleObject(
                             name = "NBP → BANK_A (dokapitalizowanie)",
                             value = """
-                                <SorbnetPaymentRequest>
-                                    <paymentId>SORB-20260609-0004</paymentId>
-                                    <amount>3000000.00</amount>
-                                    <currency>PLN</currency>
-                                    <senderBankId>NBP</senderBankId>
-                                    <receiverBankId>BANK_A</receiverBankId>
-                                    <senderAccount>10100100000000000000000000</senderAccount>
-                                    <receiverAccount>11111100000000000000000001</receiverAccount>
-                                    <title>Zasilenie rachunku rozrachunkowego przez NBP</title>
-                                    <status>NEW</status>
-                                </SorbnetPaymentRequest>
+                                <Document>
+                                    <FIToFICstmrCdtTrf>
+                                        <GrpHdr>
+                                            <MsgId>SORB-20260611-0004</MsgId>
+                                            <CreDtTm>2026-06-11T12:30:00</CreDtTm>
+                                            <NbOfTxs>1</NbOfTxs>
+                                            <TtlIntrBkSttlmAmt Ccy="PLN">3000000.00</TtlIntrBkSttlmAmt>
+                                            <SttlmInf>
+                                                <SttlmMtd>CLRG</SttlmMtd>
+                                                <ClrSys><Cd>SORBNET</Cd></ClrSys>
+                                            </SttlmInf>
+                                        </GrpHdr>
+                                        <CdtTrfTxInf>
+                                            <PmtId>
+                                                <InstrId>SORB-20260611-0004</InstrId>
+                                                <EndToEndId>SORB-20260611-0004</EndToEndId>
+                                                <TxId>SORB-20260611-0004</TxId>
+                                            </PmtId>
+                                            <IntrBkSttlmAmt Ccy="PLN">3000000.00</IntrBkSttlmAmt>
+                                            <DbtrAcct><Id><IBAN>10100100000000000000000000</IBAN></Id></DbtrAcct>
+                                            <DbtrAgt><FinInstnId><BICFI>NBP</BICFI></FinInstnId></DbtrAgt>
+                                            <CdtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></CdtrAcct>
+                                            <CdtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></CdtrAgt>
+                                            <RmtInf><Ustrd>Zasilenie rachunku rozrachunkowego przez NBP</Ustrd></RmtInf>
+                                            <SplmtryData>
+                                                <Envlp>
+                                                    <ServiceCode>SORBNET</ServiceCode>
+                                                    <SenderBankId>NBP</SenderBankId>
+                                                    <ReceiverBankId>BANK_A</ReceiverBankId>
+                                                </Envlp>
+                                            </SplmtryData>
+                                        </CdtTrfTxInf>
+                                    </FIToFICstmrCdtTrf>
+                                </Document>
                                 """
                         )
                     }
@@ -231,6 +330,7 @@ public class SorbnetPaymentController {
         summary = "Pobierz historię przelewów banku",
         description = """
             Zwraca historię przelewów dla wskazanego banku wyłącznie w formacie XML.
+            Każda pozycja listy jest raportem statusu ISO 20022 (CstmrPmtStsRpt).
             Jeżeli parametr from nie zostanie podany, zwracane są przelewy od początku bieżącego dnia.
             Zakres historii jest ograniczony maksymalnie do jednego miesiąca wstecz.
             """
@@ -243,29 +343,34 @@ public class SorbnetPaymentController {
                 mediaType = MediaType.APPLICATION_XML_VALUE,
                 schema = @Schema(implementation = PaymentListResponseDto.class),
                 examples = @ExampleObject(
-                    name = "XML history response",
+                    name = "Historia ISO 20022",
                     value = """
                         <Payments>
                             <payment>
-                                <paymentId>SORB-20260609-0001</paymentId>
-                                <status>SETTLED</status>
-                                <message>Przelew został rozliczony</message>
-                                <senderBankId>BANK_A</senderBankId>
-                                <receiverBankId>BANK_B</receiverBankId>
-                                <senderAccount>11111100000000000000000001</senderAccount>
-                                <receiverAccount>22222200000000000000000002</receiverAccount>
-                                <amount>1000000.00</amount>
-                                <settledAt>2026-06-09T13:00:00</settledAt>
-                            </payment>
-                            <payment>
-                                <paymentId>SORB-20260609-0002</paymentId>
-                                <status>GRIDLOCK_HELD</status>
-                                <message>Przelew oczekuje w kolejce gridlock</message>
-                                <senderBankId>BANK_A</senderBankId>
-                                <receiverBankId>BANK_C</receiverBankId>
-                                <senderAccount>11111100000000000000000001</senderAccount>
-                                <receiverAccount>33333300000000000000000003</receiverAccount>
-                                <amount>8000000.00</amount>
+                                <CstmrPmtStsRpt>
+                                    <GrpHdr>
+                                        <MsgId>RESP-SORB-20260611-0001</MsgId>
+                                        <CreDtTm>2026-06-11T13:00:01</CreDtTm>
+                                    </GrpHdr>
+                                    <OrgnlPmtInfAndSts>
+                                        <OrgnlPmtInfId>SORB-20260611-0001</OrgnlPmtInfId>
+                                        <TxInfAndSts>
+                                            <OrgnlInstrId>SORB-20260611-0001</OrgnlInstrId>
+                                            <OrgnlTxId>SORB-20260611-0001</OrgnlTxId>
+                                            <TxSts>SETTLED</TxSts>
+                                            <StsRsnInf><AddtlInf>Przelew został rozliczony</AddtlInf></StsRsnInf>
+                                            <OrgnlTxRef>
+                                                <IntrBkSttlmAmt Ccy="PLN">1000000.00</IntrBkSttlmAmt>
+                                                <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
+                                                <CdtrAgt><FinInstnId><BICFI>BANK_B</BICFI></FinInstnId></CdtrAgt>
+                                                <DbtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></DbtrAcct>
+                                                <CdtrAcct><Id><IBAN>22222200000000000000000002</IBAN></Id></CdtrAcct>
+                                                <SplmtryData><Envlp><SourceServiceCode>SORBNET</SourceServiceCode></Envlp></SplmtryData>
+                                            </OrgnlTxRef>
+                                            <SettledAt>2026-06-11T13:00:01</SettledAt>
+                                        </TxInfAndSts>
+                                    </OrgnlPmtInfAndSts>
+                                </CstmrPmtStsRpt>
                             </payment>
                         </Payments>
                         """
@@ -318,7 +423,7 @@ public class SorbnetPaymentController {
 
     @Operation(
         summary = "Pobierz szczegóły przelewu",
-        description = "Zwraca szczegóły pojedynczego przelewu wyłącznie w formacie XML."
+        description = "Zwraca szczegóły pojedynczego przelewu jako raport statusu ISO 20022 (CstmrPmtStsRpt) w XML."
     )
     @ApiResponses({
         @ApiResponse(
@@ -328,19 +433,34 @@ public class SorbnetPaymentController {
                 mediaType = MediaType.APPLICATION_XML_VALUE,
                 schema = @Schema(implementation = PaymentResponseDto.class),
                 examples = @ExampleObject(
-                    name = "XML payment details",
+                    name = "Szczegóły przelewu ISO 20022",
                     value = """
-                        <SorbnetPaymentResponse>
-                            <paymentId>SORB-20260609-0001</paymentId>
-                            <status>SETTLED</status>
-                            <message>Przelew został rozliczony</message>
-                            <senderBankId>BANK_A</senderBankId>
-                            <receiverBankId>BANK_B</receiverBankId>
-                            <senderAccount>11111100000000000000000001</senderAccount>
-                            <receiverAccount>22222200000000000000000002</receiverAccount>
-                            <amount>1000000.00</amount>
-                            <settledAt>2026-06-09T13:00:00</settledAt>
-                        </SorbnetPaymentResponse>
+                        <Document>
+                            <CstmrPmtStsRpt>
+                                <GrpHdr>
+                                    <MsgId>RESP-SORB-20260611-0001</MsgId>
+                                    <CreDtTm>2026-06-11T13:00:01</CreDtTm>
+                                </GrpHdr>
+                                <OrgnlPmtInfAndSts>
+                                    <OrgnlPmtInfId>SORB-20260611-0001</OrgnlPmtInfId>
+                                    <TxInfAndSts>
+                                        <OrgnlInstrId>SORB-20260611-0001</OrgnlInstrId>
+                                        <OrgnlTxId>SORB-20260611-0001</OrgnlTxId>
+                                        <TxSts>SETTLED</TxSts>
+                                        <StsRsnInf><AddtlInf>Przelew został rozliczony</AddtlInf></StsRsnInf>
+                                        <OrgnlTxRef>
+                                            <IntrBkSttlmAmt Ccy="PLN">1000000.00</IntrBkSttlmAmt>
+                                            <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
+                                            <CdtrAgt><FinInstnId><BICFI>BANK_B</BICFI></FinInstnId></CdtrAgt>
+                                            <DbtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></DbtrAcct>
+                                            <CdtrAcct><Id><IBAN>22222200000000000000000002</IBAN></Id></CdtrAcct>
+                                            <SplmtryData><Envlp><SourceServiceCode>SORBNET</SourceServiceCode></Envlp></SplmtryData>
+                                        </OrgnlTxRef>
+                                        <SettledAt>2026-06-11T13:00:01</SettledAt>
+                                    </TxInfAndSts>
+                                </OrgnlPmtInfAndSts>
+                            </CstmrPmtStsRpt>
+                        </Document>
                         """
                 )
             )
@@ -354,8 +474,8 @@ public class SorbnetPaymentController {
     @GetMapping("/{paymentId}")
     public PaymentResponseDto getById(
             @Parameter(
-                description = "Unikalny identyfikator przelewu.",
-                example = "SORB-20260609-0001"
+                description = "Unikalny identyfikator przelewu (OrgnlTxId).",
+                example = "SORB-20260611-0001"
             )
             @PathVariable String paymentId) {
 
@@ -375,6 +495,7 @@ public class SorbnetPaymentController {
         response.setReceiverBankId((String) result.getOrDefault("receiverBankId", requestDto.getReceiverBankId()));
         response.setSenderAccount(requestDto.getSenderAccount());
         response.setReceiverAccount(requestDto.getReceiverAccount());
+        response.setSourceServiceCode(requestDto.getType() != null ? requestDto.getType() : "SORBNET");
 
         Object amount = result.get("amount");
         if (amount instanceof BigDecimal bd) {
@@ -382,6 +503,7 @@ public class SorbnetPaymentController {
         } else {
             response.setAmount(requestDto.getAmount());
         }
+        response.setCurrency(requestDto.getCurrency());
 
         Object settledAt = result.get("settledAt");
         if (settledAt != null) {
@@ -401,6 +523,8 @@ public class SorbnetPaymentController {
         dto.setReceiverAccount(payment.getReceiverAccount());
         dto.setReceiverBankId(payment.getReceiverBankId());
         dto.setAmount(payment.getAmount());
+        dto.setCurrency(payment.getCurrency());
+        dto.setSourceServiceCode(payment.getSourceService() != null ? payment.getSourceService() : "SORBNET");
         dto.setSettledAt(payment.getSettledAt() != null ? payment.getSettledAt().toString() : null);
         return dto;
     }
