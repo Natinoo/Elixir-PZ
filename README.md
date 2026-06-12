@@ -102,17 +102,17 @@ Projekt jest przygotowany do uruchomienia przy pomocy Docker Compose.
    ```
 ## Dokumentacja API / Swagger / OpenAPI
 
-Po uruchomieniu kontenera dokumentacje API dostępne są przez Swagger pod adresami:
+Po uruchomieniu kontenerów przez start.bat dokumentacje API dostępne są przez Swagger pod adresami:
 
 - **Elixir**  
   http://localhost:8081/swagger-ui/index.html  
-  (`/v3/api-docs` trzeba wpisać u góry w Swaggerze, aby działało — do poprawki)
 
 - **Elixir-Express**  
   http://localhost:8082/swagger-ui/index.html
 
 - **Sorbnet**  
   http://localhost:8083/swagger-ui/index.html
+  
 ## Technologie
 
 ## GUI
@@ -123,11 +123,8 @@ Po uruchomieniu kontenera dokumentacje API dostępne są przez Swagger pod adres
   - GUI pracownika i operatora banku
     http://localhost:8082/
 - **Sorbnet**
-  - GUI pracownika banku  
-    http://localhost:5173/
-
-  - GUI operatora banku  
-    http://localhost:5174/
+  - GUI pracownika i operatora banku  
+    http://localhost:8083/
 
 ## Technologie
 
@@ -137,8 +134,7 @@ W projekcie wykorzystano:
 - **Apache Kafka**
 - **Docker / Docker Compose**
 - **REST API**
-- **JSON** jako aktualny format komunikatów
-- **XML / JAXB** jako planowany kierunek dalszej rozbudowy
+- **XML / JAXB**jako aktualny format komunikatów
 
 ## Cel projektu
 
