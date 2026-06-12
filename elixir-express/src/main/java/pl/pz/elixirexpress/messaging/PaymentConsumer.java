@@ -1,20 +1,12 @@
 package pl.pz.elixirexpress.messaging;
 
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.stereotype.Component;
-
-@Component
+/**
+ * Ten forwarding został celowo wyłączony.
+ *
+ * Elixir Express nie wysyła już każdego zwykłego przelewu do Sorbnetu.
+ * Express sam loguje i rozlicza swoje transakcje lokalnie.
+ * Do Sorbnetu trafiają tylko requesty płynnościowe wysyłane z ExpressPaymentService
+ * na topic liquidity.requests.express.sorbnet, gdy bank nie ma płynności.
+ */
 public class PaymentConsumer {
-
-    private final SorbnetProducer sorbnetProducer;
-
-    public PaymentConsumer(SorbnetProducer sorbnetProducer) {
-        this.sorbnetProducer = sorbnetProducer;
-    }
-
-    @KafkaListener(topics = "payments.elixir-express", groupId = "elixir-express-group")
-    public void consume(String message) {
-        System.out.println(">>> ELIXIR-EXPRESS received payment: " + message);
-        sorbnetProducer.sendToSorbnet(message);
-    }
 }

@@ -8,6 +8,10 @@ import org.springframework.kafka.config.TopicBuilder;
 @Configuration
 public class KafkaConfig {
 
+    /**
+     * Stary topic wejściowy Expressa zostaje tylko dla kompatybilności.
+     * Aktualne GUI wysyła przelewy przez REST.
+     */
     @Bean
     public NewTopic elixirExpressTopic() {
         return TopicBuilder.name("payments.elixir-express")
@@ -16,10 +20,22 @@ public class KafkaConfig {
                 .build();
     }
 
+    /**
+     * Normalne przelewy Express nie są już wysyłane do Sorbnetu.
+     * Topic zostawiony, żeby środowisko Kafka nie wywaliło się, jeśli Sorbnet go nadal definiuje/nasłuchuje.
+     */
     @Bean
     public NewTopic expressToSorbnetTopic() {
         return TopicBuilder.name("payments.express.sorbnet")
                 .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic expressLiquidityRequestsTopic() {
+        return TopicBuilder.name("liquidity.requests.express.sorbnet")
+                .partitions(1)
                 .replicas(1)
                 .build();
     }

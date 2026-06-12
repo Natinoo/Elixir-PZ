@@ -1,22 +1,12 @@
 package pl.pz.elixirexpress.messaging;
 
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.stereotype.Component;
-
-import java.util.UUID;
-
-@Component
+/**
+ * Klasa pozostawiona tylko dla kompatybilności plików projektu.
+ * Normalne przelewy Express nie są już forwardowane do Sorbnetu.
+ * Requesty płynnościowe wysyła bezpośrednio ExpressPaymentService.
+ */
 public class SorbnetProducer {
-
-    private final KafkaTemplate<String, String> kafkaTemplate;
-
-    public SorbnetProducer(KafkaTemplate<String, String> kafkaTemplate) {
-        this.kafkaTemplate = kafkaTemplate;
-    }
-
     public void sendToSorbnet(String payload) {
-        String key = UUID.randomUUID().toString();
-        kafkaTemplate.send("payments.express.sorbnet", key, payload);
-        System.out.println(">>> ELIXIR-EXPRESS forwarded payment to SORBNET with key: " + key);
+        // intentionally disabled
     }
 }

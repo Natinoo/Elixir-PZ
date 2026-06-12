@@ -6,5 +6,6 @@ public enum PaymentStatus {
     BLOCKED,
     REJECTED,
     GRIDLOCK_HELD,
-    SETTLED  
+    WAITING_FOR_LIQUIDITY,
+    SETTLED
 }

@@ -12,6 +12,7 @@
       <div class="brand">ELIXIR EXPRESS</div>
       <nav class="side-nav">
         <button class="tab active" data-tab="payments">Przelewy</button>
+        <button class="tab" data-tab="accounts">Płynność banków</button>
         <button class="tab" data-tab="debug">Debug API</button>
       </nav>
     </aside>
@@ -21,45 +22,61 @@
         <div class="header">
           <div>
             <h1>Panel testowy Elixir Express</h1>
-            <p class="subtitle">Szybkie przelewy express — natychmiastowe rozliczenie przez SORBNET</p>
+            <p class="subtitle">Szybkie przelewy express — bez sesji, z kontrolą płynności banków w czasie rzeczywistym</p>
           </div>
+          <span class="type-badge">serviceCode: EXPRESS</span>
         </div>
 
         <section id="payments" class="tab-content active">
           <div class="stats">
-            <div class="stat">
-              <span class="label">Wszystkie Express</span>
-              <strong id="allCount">0</strong>
-            </div>
-            <div class="stat">
-              <span class="label">Processed</span>
-              <strong id="processedCount">0</strong>
-            </div>
-            <div class="stat">
-              <span class="label">Health</span>
-              <strong id="healthValue">...</strong>
-            </div>
+            <div class="stat"><span class="label">Wszystkie Express</span><strong id="allCount">0</strong></div>
+            <div class="stat"><span class="label">Processed</span><strong id="processedCount">0</strong></div>
+            <div class="stat"><span class="label">Gridlock held</span><strong id="heldCount">0</strong></div>
+            <div class="stat"><span class="label">Health</span><strong id="healthValue">...</strong></div>
           </div>
 
           <div class="card">
             <h2>Nowy przelew express</h2>
-            <div class="grid">
+            <p class="subtitle">Dane osoby i IBAN są danymi klienta. Saldo i limit są sprawdzane na technicznym koncie banku w EXPRESS.</p>
+
+            <div class="section-title">Nadawca</div>
+            <div class="grid three">
+              <label>Imię i nazwisko nadawcy
+                <input id="senderName" placeholder="Jan Kowalski" maxlength="120" />
+              </label>
               <label>Bank nadawcy
-                <select id="senderAccount">
+                <select id="senderBankId">
                   <option value="">Wybierz bank</option>
                   <option value="BANK_A">BANK_A</option>
                   <option value="BANK_B">BANK_B</option>
                   <option value="BANK_C">BANK_C</option>
                 </select>
+              </label>
+              <label>IBAN nadawcy
+                <input id="senderAccount" placeholder="PL11111100000000000000000001" maxlength="28" />
+              </label>
+            </div>
+
+            <div class="section-title">Odbiorca</div>
+            <div class="grid three">
+              <label>Imię i nazwisko odbiorcy
+                <input id="receiverName" placeholder="Anna Nowak" maxlength="120" />
               </label>
               <label>Bank odbiorcy
-                <select id="receiverAccount">
+                <select id="receiverBankId">
                   <option value="">Wybierz bank</option>
                   <option value="BANK_A">BANK_A</option>
                   <option value="BANK_B">BANK_B</option>
                   <option value="BANK_C">BANK_C</option>
                 </select>
               </label>
+              <label>IBAN odbiorcy
+                <input id="receiverAccount" placeholder="PL22222200000000000000000002" maxlength="28" />
+              </label>
+            </div>
+
+            <div class="section-title">Szczegóły przelewu</div>
+            <div class="grid">
               <label>Kwota
                 <input id="amount" type="number" step="0.01" placeholder="Np. 250.00" />
               </label>
@@ -68,8 +85,15 @@
               </label>
             </div>
             <label>Tytuł
-              <input id="title" placeholder="Np. ekspres test" />
+              <input id="title" placeholder="Np. ekspres test" maxlength="140" />
             </label>
+
+            <div class="quick-actions">
+              <button type="button" class="secondary" onclick="fillExample('A_TO_B')">Przykład BANK_A → BANK_B</button>
+              <button type="button" class="secondary" onclick="fillExample('B_TO_C')">Przykład BANK_B → BANK_C</button>
+              <button type="button" class="secondary" onclick="fillExample('C_TO_A')">Przykład BANK_C → BANK_A</button>
+            </div>
+
             <div class="row-between" style="margin-top: 16px;">
               <button id="sendPaymentBtn" class="primary">Wyślij express</button>
               <div id="paymentMessage" class="message"></div>
@@ -80,12 +104,13 @@
             <div class="row-between" style="padding: 20px 20px 8px;">
               <div>
                 <h2 style="margin-bottom: 6px;">Historia przelewów EXPRESS</h2>
-                <p class="subtitle">Tylko przelewy wykonane kanałem Express</p>
+                <p class="subtitle">Przelewy wykonane kanałem Express. GRIDLOCK_HELD oznacza zatrzymanie przez brak płynności.</p>
               </div>
               <div class="filter-tabs">
                 <button class="tab active" data-filter="ALL">Wszystkie</button>
                 <button class="tab" data-filter="QUEUED">Queued</button>
                 <button class="tab" data-filter="PROCESSED">Processed</button>
+                <button class="tab" data-filter="GRIDLOCK_HELD">Gridlock</button>
                 <button class="tab" data-filter="BLOCKED">Blocked</button>
                 <button class="tab" data-filter="REJECTED">Rejected</button>
               </div>
@@ -93,11 +118,35 @@
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>ID</th><th>Nadawca</th><th>Odbiorca</th><th>Kwota</th><th>Waluta</th><th>Tytuł</th><th>Status</th><th>Typ</th><th>Data</th></tr>
+                  <tr>
+                    <th>ID</th><th>Nadawca</th><th>Bank nadawcy</th><th>IBAN nadawcy</th>
+                    <th>Odbiorca</th><th>Bank odbiorcy</th><th>IBAN odbiorcy</th>
+                    <th>Kwota</th><th>Tytuł</th><th>Status</th><th>Typ</th><th>Data</th>
+                  </tr>
                 </thead>
                 <tbody id="paymentsTableBody">
-                  <tr><td colspan="9">Ładowanie...</td></tr>
+                  <tr><td colspan="12">Ładowanie...</td></tr>
                 </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="accounts" class="tab-content">
+          <div class="card">
+            <div class="row-between">
+              <div>
+                <h2>Płynność banków EXPRESS</h2>
+                <p class="subtitle">Bank jest blokowany, jeśli pozostaje poniżej limitu zadłużenia dłużej niż skonfigurowany czas.</p>
+              </div>
+              <button class="primary" onclick="loadAccounts()">Odśwież</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Bank</th><th>Nazwa</th><th>Saldo</th><th>Limit zadłużenia</th><th>Status</th><th>Od kiedy poniżej limitu</th><th>Akcje</th></tr>
+                </thead>
+                <tbody id="accountsTableBody"><tr><td colspan="7">Ładowanie...</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -106,7 +155,6 @@
         <section id="debug" class="tab-content">
           <div class="card">
             <h2>Debug API</h2>
-            <p class="subtitle">Szybki podgląd endpointów używanych przez GUI</p>
             <pre id="debugOutput">Ładowanie...</pre>
           </div>
         </section>
@@ -118,16 +166,30 @@
     const API_BASE = '';
     let selectedStatus = 'ALL';
 
-    const sideTabs = document.querySelectorAll('.side-nav .tab');
-    const tabContents = document.querySelectorAll('.tab-content');
+    const EXAMPLES = {
+      A_TO_B: {
+        senderName: 'Jan Kowalski', senderBankId: 'BANK_A', senderAccount: 'PL11111100000000000000000001',
+        receiverName: 'Anna Nowak', receiverBankId: 'BANK_B', receiverAccount: 'PL22222200000000000000000002',
+        amount: '250.00', title: 'Express A do B'
+      },
+      B_TO_C: {
+        senderName: 'Piotr Zieliński', senderBankId: 'BANK_B', senderAccount: 'PL22222200000000000000000012',
+        receiverName: 'Maria Wiśniewska', receiverBankId: 'BANK_C', receiverAccount: 'PL33333300000000000000000023',
+        amount: '750.00', title: 'Express B do C'
+      },
+      C_TO_A: {
+        senderName: 'Katarzyna Wójcik', senderBankId: 'BANK_C', senderAccount: 'PL33333300000000000000000033',
+        receiverName: 'Adam Nowicki', receiverBankId: 'BANK_A', receiverAccount: 'PL11111100000000000000000044',
+        amount: '500.00', title: 'Express C do A'
+      }
+    };
 
-    sideTabs.forEach(tab => {
+    document.querySelectorAll('.side-nav .tab').forEach(tab => {
       tab.addEventListener('click', () => {
-        sideTabs.forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.side-nav .tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        tabContents.forEach(content => {
-          content.classList.toggle('active', content.id === tab.dataset.tab);
-        });
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.toggle('active', content.id === tab.dataset.tab));
+        if (tab.dataset.tab === 'accounts') loadAccounts();
       });
     });
 
@@ -140,13 +202,14 @@
       });
     });
 
-    function statusClass(status) {
-      const value = (status || '').toLowerCase();
-      if (value === 'queued') return 'queued';
-      if (value === 'processed') return 'processed';
-      if (value === 'blocked') return 'blocked';
-      if (value === 'rejected') return 'rejected';
-      return 'queued';
+    function fillExample(key) {
+      const data = EXAMPLES[key];
+      if (!data) return;
+      Object.entries(data).forEach(([id, value]) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value;
+      });
+      document.getElementById('currency').value = 'PLN';
     }
 
     async function loadHealth() {
@@ -159,123 +222,101 @@
       }
     }
 
-    // Funkcja do parsowania XML odpowiedzi
     function parseXmlResponse(xmlString) {
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-      const paymentId = xmlDoc.getElementsByTagName("paymentId")[0]?.textContent || "";
-      const status = xmlDoc.getElementsByTagName("status")[0]?.textContent || "";
-      return { paymentId, status };
+      const xmlDoc = new DOMParser().parseFromString(xmlString, 'text/xml');
+      return {
+        paymentId: getTag(xmlDoc, 'paymentId'),
+        status: getTag(xmlDoc, 'status'),
+        message: getTag(xmlDoc, 'message')
+      };
+    }
+
+    function getTag(xml, tag) {
+      return xml.getElementsByTagName(tag)[0]?.textContent || '';
     }
 
     async function loadPayments() {
       const tbody = document.getElementById('paymentsTableBody');
-      tbody.innerHTML = '<tr><td colspan="9">Ładowanie...</td></tr>';
-      
+      tbody.innerHTML = '<tr><td colspan="12">Ładowanie...</td></tr>';
       try {
-        let url;
-        if (selectedStatus === 'ALL') {
-          url = `${API_BASE}/api/express/payments`;
-        } else {
-          url = `${API_BASE}/api/express/payments/status/${selectedStatus}`;
-        }
-        
+        const url = selectedStatus === 'ALL'
+          ? `${API_BASE}/api/express/payments`
+          : `${API_BASE}/api/express/payments/status/${selectedStatus}`;
         const response = await fetch(url);
         const allPayments = await response.json();
-        
-        // Filtrowanie tylko przelewów typu EXPRESS
-        const data = Array.isArray(allPayments) ? allPayments.filter(p => p.type === 'EXPRESS') : [];
-        
-        if (data.length === 0) {
-          tbody.innerHTML = '<td><td colspan="9">Brak danych (brak przelewów EXPRESS)</td></tr>';
-          updateStats([]);
-          updateDebug({ endpoint: url, resultCount: 0, message: 'No EXPRESS payments found' });
-          return;
-        }
-        
-        tbody.innerHTML = data.map(payment => `
-          <tr>
-            <td>${payment.paymentId || '-'}</td>
-            <td>${payment.senderAccount || '-'}</td>
-            <td>${payment.receiverAccount || '-'}</td>
-            <td>${payment.amount ?? '-'}</td>
-            <td>${payment.currency || 'PLN'}</td>
-            <td>${payment.title || '-'}</td>
-            <td><span class="status ${statusClass(payment.status)}">${payment.status || '-'}</span></td>
-            <td><span class="type-badge">${payment.type || 'EXPRESS'}</span></td>
-            <td>${payment.createdAt || '-'}</td>
-          </tr>
-        `).join('');
-        
+        const data = Array.isArray(allPayments) ? allPayments.filter(p => !p.type || p.type === 'EXPRESS') : [];
+        renderPayments(data);
         updateStats(data);
         updateDebug({ endpoint: url, resultCount: data.length, sample: data.slice(0, 3) });
       } catch (e) {
-        console.error('Error loading payments:', e);
-        tbody.innerHTML = `<tr><td colspan="9">Błąd ładowania danych: ${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="12">Błąd ładowania danych: ${escapeHtml(e.message)}</td></tr>`;
         updateDebug({ error: 'Błąd pobierania płatności', details: String(e) });
       }
+    }
+
+    function renderPayments(data) {
+      const tbody = document.getElementById('paymentsTableBody');
+      if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="12">Brak danych.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(p => `
+        <tr>
+          <td class="mono small">${escapeHtml(p.paymentId || '-')}</td>
+          <td>${escapeHtml(p.senderName || '-')}</td>
+          <td>${escapeHtml(p.senderBankId || '-')}</td>
+          <td class="mono">${escapeHtml(p.senderAccount || '-')}</td>
+          <td>${escapeHtml(p.receiverName || '-')}</td>
+          <td>${escapeHtml(p.receiverBankId || '-')}</td>
+          <td class="mono">${escapeHtml(p.receiverAccount || '-')}</td>
+          <td>${formatMoney(p.amount, p.currency)}</td>
+          <td>${escapeHtml(p.title || '-')}</td>
+          <td><span class="status ${statusClass(p.status)}">${escapeHtml(p.status || '-')}</span></td>
+          <td><span class="type-badge">${escapeHtml(p.type || 'EXPRESS')}</span></td>
+          <td>${escapeHtml(formatDate(p.createdAt))}</td>
+        </tr>`).join('');
     }
 
     function updateStats(payments) {
       document.getElementById('allCount').textContent = payments.length;
       document.getElementById('processedCount').textContent = payments.filter(p => p.status === 'PROCESSED').length;
-    }
-
-    function updateDebug(data) {
-      document.getElementById('debugOutput').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('heldCount').textContent = payments.filter(p => p.status === 'GRIDLOCK_HELD').length;
     }
 
     async function sendPayment() {
-      const senderAccount = document.getElementById('senderAccount').value;
-      const receiverAccount = document.getElementById('receiverAccount').value;
-      const amount = Number(document.getElementById('amount').value);
-      const currency = document.getElementById('currency').value || 'PLN';
-      const title = document.getElementById('title').value;
-      
+      const payment = {
+        senderName: valueOf('senderName'), receiverName: valueOf('receiverName'),
+        senderBankId: valueOf('senderBankId'), receiverBankId: valueOf('receiverBankId'),
+        senderAccount: normalizeIban(valueOf('senderAccount')), receiverAccount: normalizeIban(valueOf('receiverAccount')),
+        amount: valueOf('amount'), currency: valueOf('currency') || 'PLN', title: valueOf('title')
+      };
       const message = document.getElementById('paymentMessage');
-      
-      if (!senderAccount || !receiverAccount || !amount || amount <= 0 || !title) {
+      message.className = 'message';
+
+      const error = validatePayment(payment);
+      if (error) {
         message.className = 'message error';
-        message.textContent = '❌ Wypełnij wszystkie pola poprawnie';
+        message.textContent = `❌ ${error}`;
         return;
       }
-      
-      // Budowanie XML
-      const payloadXml = `<?xml version="1.0" encoding="UTF-8"?>
-<Payment>
-    <amount>${amount.toFixed(2)}</amount>
-    <currency>${currency}</currency>
-    <senderAccount>${senderAccount}</senderAccount>
-    <receiverAccount>${receiverAccount}</receiverAccount>
-    <title>${title}</title>
-    <senderBankId>${senderAccount}</senderBankId>
-    <receiverBankId>${receiverAccount}</receiverBankId>
-    <type>EXPRESS</type>
-</Payment>`;
-      
-      message.className = 'message';
+
+      const payloadXml = buildPaymentXml(payment);
       message.textContent = 'Wysyłanie...';
-      
+
       try {
         const response = await fetch(`${API_BASE}/api/express/payments`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/xml', 'Accept': 'application/xml' },
           body: payloadXml
         });
-        
         const responseText = await response.text();
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${responseText}`);
-        }
-        
-        const { paymentId, status } = parseXmlResponse(responseText);
-        message.className = 'message ok';
-        message.textContent = `✅ OK: ${paymentId || 'wysłano'} (${status || 'QUEUED'}) - Express`;
-        
+        if (!response.ok) throw new Error(parseXmlResponse(responseText).message || `HTTP ${response.status}`);
+        const parsed = parseXmlResponse(responseText);
+        message.className = parsed.status === 'GRIDLOCK_HELD' ? 'message warn' : 'message ok';
+        message.textContent = `✅ ${parsed.paymentId || 'wysłano'} (${parsed.status || 'QUEUED'}) ${parsed.message ? '- ' + parsed.message : ''}`;
         document.getElementById('amount').value = '';
         document.getElementById('title').value = '';
-        await loadPayments();
+        await Promise.all([loadPayments(), loadAccounts()]);
       } catch (e) {
         message.className = 'message error';
         message.textContent = `❌ Błąd wysyłki: ${e.message}`;
@@ -283,9 +324,98 @@
       }
     }
 
+    function buildPaymentXml(payment) {
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<Payment>
+  <amount>${escapeXml(Number(payment.amount).toFixed(2))}</amount>
+  <currency>${escapeXml(payment.currency)}</currency>
+  <senderName>${escapeXml(payment.senderName)}</senderName>
+  <receiverName>${escapeXml(payment.receiverName)}</receiverName>
+  <senderBankId>${escapeXml(payment.senderBankId)}</senderBankId>
+  <receiverBankId>${escapeXml(payment.receiverBankId)}</receiverBankId>
+  <senderAccount>${escapeXml(payment.senderAccount)}</senderAccount>
+  <receiverAccount>${escapeXml(payment.receiverAccount)}</receiverAccount>
+  <title>${escapeXml(payment.title)}</title>
+  <type>EXPRESS</type>
+</Payment>`.trim();
+    }
+
+    async function loadAccounts() {
+      const tbody = document.getElementById('accountsTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="7">Ładowanie...</td></tr>';
+      try {
+        const response = await fetch(`${API_BASE}/api/express/accounts`);
+        const accounts = await response.json();
+        if (!Array.isArray(accounts) || accounts.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7">Brak kont banków.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = accounts.map(a => {
+          const over = Number(a.balance) < -Number(a.debtLimit);
+          return `<tr>
+            <td>${escapeHtml(a.bankId)}</td>
+            <td>${escapeHtml(a.bankName)}</td>
+            <td>${formatMoney(a.balance, 'PLN')}</td>
+            <td>${formatMoney(-Number(a.debtLimit || 0), 'PLN')}</td>
+            <td><span class="status ${a.blocked ? 'blocked' : over ? 'rejected' : 'processed'}">${a.blocked ? 'ZABLOKOWANY' : over ? 'POZA LIMITEM' : 'AKTYWNY'}</span></td>
+            <td>${escapeHtml(formatDate(a.overlimitSince))}</td>
+            <td class="actions"><input id="topup-${escapeHtml(a.bankId)}" type="number" step="0.01" placeholder="Kwota"/><button class="secondary" onclick="topUpBank('${escapeHtml(a.bankId)}')">Zasil</button><button class="secondary" onclick="unblockBank('${escapeHtml(a.bankId)}')">Odblokuj</button></td>
+          </tr>`;
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="7">Błąd ładowania kont: ${escapeHtml(e.message)}</td></tr>`;
+      }
+    }
+
+    async function topUpBank(bankId) {
+      const input = document.getElementById(`topup-${bankId}`);
+      const amount = input?.value;
+      if (!amount || Number(amount) <= 0) return alert('Podaj poprawną kwotę.');
+      await fetch(`${API_BASE}/api/express/accounts/${bankId}/topup?amount=${encodeURIComponent(amount)}`, { method: 'POST' });
+      await Promise.all([loadAccounts(), loadPayments()]);
+    }
+
+    async function unblockBank(bankId) {
+      await fetch(`${API_BASE}/api/express/accounts/${bankId}/unblock`, { method: 'POST' });
+      await loadAccounts();
+    }
+
+    function validatePayment(p) {
+      if (!p.senderName) return 'Podaj imię i nazwisko nadawcy.';
+      if (!p.receiverName) return 'Podaj imię i nazwisko odbiorcy.';
+      if (!p.senderBankId) return 'Wybierz bank nadawcy.';
+      if (!p.receiverBankId) return 'Wybierz bank odbiorcy.';
+      if (p.senderBankId === p.receiverBankId) return 'Bank nadawcy i odbiorcy nie mogą być takie same.';
+      if (!/^PL\d{26}$/.test(p.senderAccount)) return 'IBAN nadawcy powinien mieć format PL + 26 cyfr.';
+      if (!/^PL\d{26}$/.test(p.receiverAccount)) return 'IBAN odbiorcy powinien mieć format PL + 26 cyfr.';
+      if (p.senderAccount === p.receiverAccount) return 'IBAN nadawcy i odbiorcy nie mogą być takie same.';
+      if (!p.amount || Number(p.amount) <= 0) return 'Kwota musi być większa od zera.';
+      if (p.currency !== 'PLN') return 'Obsługiwana jest tylko waluta PLN.';
+      if (!p.title) return 'Podaj tytuł przelewu.';
+      return null;
+    }
+
+    function valueOf(id) { return document.getElementById(id).value.trim(); }
+    function normalizeIban(value) { return String(value || '').replace(/\s+/g, '').toUpperCase(); }
+    function statusClass(status) {
+      const value = String(status || '').toLowerCase();
+      if (value === 'processed' || value === 'settled') return 'processed';
+      if (value === 'blocked') return 'blocked';
+      if (value === 'rejected') return 'rejected';
+      if (value === 'gridlock_held' || value === 'waiting_for_liquidity') return 'rejected';
+      return 'queued';
+    }
+    function updateDebug(data) { document.getElementById('debugOutput').textContent = JSON.stringify(data, null, 2); }
+    function formatMoney(value, currency = 'PLN') { return value === null || value === undefined || isNaN(Number(value)) ? '-' : `${Number(value).toFixed(2)} ${currency}`; }
+    function formatDate(value) { return value ? String(value).replace('T', ' ') : '-'; }
+    function escapeXml(value) { return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;'); }
+    function escapeHtml(value) { return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
     document.getElementById('sendPaymentBtn').addEventListener('click', sendPayment);
     loadHealth();
     loadPayments();
+    loadAccounts();
   </script>
 </body>
 </html>

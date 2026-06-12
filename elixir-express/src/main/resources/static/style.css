@@ -335,3 +335,69 @@ pre {
   background: #fef3c7;
   color: #92400e;
 }
+.section-title {
+  margin: 18px 0 10px;
+  font-weight: 800;
+  color: #0f172a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quick-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+button.secondary {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  background: #64748b;
+  color: #fff;
+  font-weight: 700;
+}
+
+button.secondary:hover {
+  background: #475569;
+}
+
+.message.warn {
+  color: var(--yellow-text);
+}
+
+.mono {
+  font-family: Consolas, Monaco, monospace;
+}
+
+.small {
+  font-size: 12px;
+}
+
+.actions {
+  min-width: 240px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.actions input {
+  min-width: 100px;
+  margin-top: 0;
+}
+
+@media (max-width: 1100px) {
+  .grid.three {
+    grid-template-columns: 1fr;
+  }
+}
+

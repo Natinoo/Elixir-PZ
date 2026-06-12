@@ -5,30 +5,42 @@ import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlRootElement;
 import jakarta.xml.bind.annotation.XmlType;
 
+import java.math.BigDecimal;
+
 @XmlRootElement(name = "Payment")
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(propOrder = {
         "paymentId",
         "amount",
         "currency",
+        "senderName",
+        "receiverName",
+        "senderBankId",
+        "receiverBankId",
         "senderAccount",
         "receiverAccount",
         "title",
-        "senderBankId",
-        "receiverBankId",
         "type"
 })
 public class ExpressPaymentDto {
 
     private String paymentId;
-    private Double amount;
+    private BigDecimal amount;
     private String currency;
+
+    private String senderName;
+    private String receiverName;
+
+    /** IBAN klienta nadawcy. */
     private String senderAccount;
+
+    /** IBAN klienta odbiorcy. */
     private String receiverAccount;
+
     private String title;
-    private String senderBankId;   
+    private String senderBankId;
     private String receiverBankId;
-    private String type;  
+    private String type;
 
     public ExpressPaymentDto() {
     }
@@ -41,11 +53,11 @@ public class ExpressPaymentDto {
         this.paymentId = paymentId;
     }
 
-    public Double getAmount() {
+    public BigDecimal getAmount() {
         return amount;
     }
 
-    public void setAmount(Double amount) {
+    public void setAmount(BigDecimal amount) {
         this.amount = amount;
     }
 
@@ -55,6 +67,22 @@ public class ExpressPaymentDto {
 
     public void setCurrency(String currency) {
         this.currency = currency;
+    }
+
+    public String getSenderName() {
+        return senderName;
+    }
+
+    public void setSenderName(String senderName) {
+        this.senderName = senderName;
+    }
+
+    public String getReceiverName() {
+        return receiverName;
+    }
+
+    public void setReceiverName(String receiverName) {
+        this.receiverName = receiverName;
     }
 
     public String getSenderAccount() {
@@ -81,20 +109,20 @@ public class ExpressPaymentDto {
         this.title = title;
     }
 
-    public String getSenderBankId() { 
-        return senderBankId; 
+    public String getSenderBankId() {
+        return senderBankId;
     }
 
-    public void setSenderBankId(String senderBankId) { 
-        this.senderBankId = senderBankId; 
+    public void setSenderBankId(String senderBankId) {
+        this.senderBankId = senderBankId;
     }
 
-    public String getReceiverBankId() { 
-        return receiverBankId; 
+    public String getReceiverBankId() {
+        return receiverBankId;
     }
 
-    public void setReceiverBankId(String receiverBankId) { 
-        this.receiverBankId = receiverBankId; 
+    public void setReceiverBankId(String receiverBankId) {
+        this.receiverBankId = receiverBankId;
     }
 
     public String getType() {

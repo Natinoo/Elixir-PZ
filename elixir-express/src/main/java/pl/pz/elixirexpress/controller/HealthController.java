@@ -1,4 +1,4 @@
-package pl.pz.elixirexpress;
+package pl.pz.elixirexpress.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
