@@ -45,6 +45,29 @@
       <div><dt>Status</dt><dd id="bankStatus">—</dd></div>
     </dl>
 
+    <h3>Nowy przelew SORBNET</h3>
+    <p class="hint">Przelew wysokokwotowy do innego banku, rozliczany natychmiast (RTGS). Zlecenie wysyłane jest jako komunikat ISO 20022.</p>
+    <form id="transferForm" class="deposit-form">
+      <label>Nadawca — imię i nazwisko
+        <input type="text" id="transferSenderName" maxlength="100" placeholder="Jan Kowalski">
+      </label>
+      <label>Bank odbiorcy
+        <select id="transferReceiver" required></select>
+      </label>
+      <label>Odbiorca — imię i nazwisko
+        <input type="text" id="transferReceiverName" maxlength="100" placeholder="Anna Nowak">
+      </label>
+      <label>Kwota
+        <input type="number" id="transferAmount" min="0.01" step="0.01" placeholder="0.00" required>
+      </label>
+      <label>Tytuł
+        <input type="text" id="transferTitle" maxlength="140" placeholder="Rozrachunek międzybankowy">
+      </label>
+      <div class="deposit-actions">
+        <button type="submit" class="btn primary">Wyślij przelew</button>
+      </div>
+    </form>
+
     <h3>Zasil rachunek</h3>
     <p class="hint">Domyślnym źródłem jest NBP (nieograniczone środki). Wystarczy wpłacić tyle, by zmieścić się w limicie zadłużenia.</p>
     <form id="depositForm" class="deposit-form">

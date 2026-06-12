@@ -97,8 +97,8 @@ public class SorbnetPaymentController {
                                                 <IntrBkSttlmAmt Ccy="PLN">1000000.00</IntrBkSttlmAmt>
                                                 <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
                                                 <CdtrAgt><FinInstnId><BICFI>BANK_B</BICFI></FinInstnId></CdtrAgt>
-                                                <DbtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></DbtrAcct>
-                                                <CdtrAcct><Id><IBAN>22222200000000000000000002</IBAN></Id></CdtrAcct>
+                                                <DbtrAcct><Id><IBAN>SORBNET-A-00000000000000000001</IBAN></Id></DbtrAcct>
+                                                <CdtrAcct><Id><IBAN>SORBNET-B-00000000000000000002</IBAN></Id></CdtrAcct>
                                                 <SplmtryData><Envlp><SourceServiceCode>SORBNET</SourceServiceCode></Envlp></SplmtryData>
                                             </OrgnlTxRef>
                                             <SettledAt>2026-06-11T13:00:01</SettledAt>
@@ -130,8 +130,8 @@ public class SorbnetPaymentController {
                                                 <IntrBkSttlmAmt Ccy="PLN">8000000.00</IntrBkSttlmAmt>
                                                 <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
                                                 <CdtrAgt><FinInstnId><BICFI>BANK_C</BICFI></FinInstnId></CdtrAgt>
-                                                <DbtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></DbtrAcct>
-                                                <CdtrAcct><Id><IBAN>33333300000000000000000003</IBAN></Id></CdtrAcct>
+                                                <DbtrAcct><Id><IBAN>SORBNET-A-00000000000000000001</IBAN></Id></DbtrAcct>
+                                                <CdtrAcct><Id><IBAN>SORBNET-C-00000000000000000003</IBAN></Id></CdtrAcct>
                                                 <SplmtryData><Envlp><SourceServiceCode>SORBNET</SourceServiceCode></Envlp></SplmtryData>
                                             </OrgnlTxRef>
                                         </TxInfAndSts>
@@ -162,8 +162,8 @@ public class SorbnetPaymentController {
                                                 <IntrBkSttlmAmt Ccy="PLN">500000.00</IntrBkSttlmAmt>
                                                 <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
                                                 <CdtrAgt><FinInstnId><BICFI>BANK_B</BICFI></FinInstnId></CdtrAgt>
-                                                <DbtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></DbtrAcct>
-                                                <CdtrAcct><Id><IBAN>22222200000000000000000002</IBAN></Id></CdtrAcct>
+                                                <DbtrAcct><Id><IBAN>SORBNET-A-00000000000000000001</IBAN></Id></DbtrAcct>
+                                                <CdtrAcct><Id><IBAN>SORBNET-B-00000000000000000002</IBAN></Id></CdtrAcct>
                                                 <SplmtryData><Envlp><SourceServiceCode>SORBNET</SourceServiceCode></Envlp></SplmtryData>
                                             </OrgnlTxRef>
                                         </TxInfAndSts>
@@ -201,6 +201,46 @@ public class SorbnetPaymentController {
                     schema = @Schema(implementation = SorbnetPaymentDto.class),
                     examples = {
                         @ExampleObject(
+                            name = "BANK_A → BANK_B (klientowski, z danymi stron)",
+                            description = "IBAN-y pominięte — SORBNET sam dociąga domyślne rachunki banków. Bank zlecający może podać Dbtr/Cdtr z imieniem i nazwiskiem klientów.",
+                            value = """
+                                <Document>
+                                    <FIToFICstmrCdtTrf>
+                                        <GrpHdr>
+                                            <MsgId>SORB-20260612-1001</MsgId>
+                                            <CreDtTm>2026-06-12T13:00:00</CreDtTm>
+                                            <NbOfTxs>1</NbOfTxs>
+                                            <TtlIntrBkSttlmAmt Ccy="PLN">1000000.00</TtlIntrBkSttlmAmt>
+                                            <SttlmInf>
+                                                <SttlmMtd>CLRG</SttlmMtd>
+                                                <ClrSys><Cd>SORBNET</Cd></ClrSys>
+                                            </SttlmInf>
+                                        </GrpHdr>
+                                        <CdtTrfTxInf>
+                                            <PmtId>
+                                                <InstrId>SORB-20260612-1001</InstrId>
+                                                <EndToEndId>SORB-20260612-1001</EndToEndId>
+                                                <TxId>SORB-20260612-1001</TxId>
+                                            </PmtId>
+                                            <IntrBkSttlmAmt Ccy="PLN">1000000.00</IntrBkSttlmAmt>
+                                            <Dbtr><Nm>Jan Kowalski</Nm></Dbtr>
+                                            <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
+                                            <Cdtr><Nm>Anna Nowak</Nm></Cdtr>
+                                            <CdtrAgt><FinInstnId><BICFI>BANK_B</BICFI></FinInstnId></CdtrAgt>
+                                            <RmtInf><Ustrd>Rozrachunek międzybankowy</Ustrd></RmtInf>
+                                            <SplmtryData>
+                                                <Envlp>
+                                                    <ServiceCode>SORBNET</ServiceCode>
+                                                    <SenderBankId>BANK_A</SenderBankId>
+                                                    <ReceiverBankId>BANK_B</ReceiverBankId>
+                                                </Envlp>
+                                            </SplmtryData>
+                                        </CdtTrfTxInf>
+                                    </FIToFICstmrCdtTrf>
+                                </Document>
+                                """
+                        ),
+                        @ExampleObject(
                             name = "BANK_A → BANK_B (standardowy)",
                             value = """
                                 <Document>
@@ -222,9 +262,9 @@ public class SorbnetPaymentController {
                                                 <TxId>SORB-20260611-0001</TxId>
                                             </PmtId>
                                             <IntrBkSttlmAmt Ccy="PLN">1000000.00</IntrBkSttlmAmt>
-                                            <DbtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></DbtrAcct>
+                                            <DbtrAcct><Id><IBAN>SORBNET-A-00000000000000000001</IBAN></Id></DbtrAcct>
                                             <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
-                                            <CdtrAcct><Id><IBAN>22222200000000000000000002</IBAN></Id></CdtrAcct>
+                                            <CdtrAcct><Id><IBAN>SORBNET-B-00000000000000000002</IBAN></Id></CdtrAcct>
                                             <CdtrAgt><FinInstnId><BICFI>BANK_B</BICFI></FinInstnId></CdtrAgt>
                                             <RmtInf><Ustrd>Rozrachunek międzybankowy</Ustrd></RmtInf>
                                             <SplmtryData>
@@ -261,9 +301,9 @@ public class SorbnetPaymentController {
                                                 <TxId>SORB-20260611-0002</TxId>
                                             </PmtId>
                                             <IntrBkSttlmAmt Ccy="PLN">8000000.00</IntrBkSttlmAmt>
-                                            <DbtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></DbtrAcct>
+                                            <DbtrAcct><Id><IBAN>SORBNET-A-00000000000000000001</IBAN></Id></DbtrAcct>
                                             <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
-                                            <CdtrAcct><Id><IBAN>33333300000000000000000003</IBAN></Id></CdtrAcct>
+                                            <CdtrAcct><Id><IBAN>SORBNET-C-00000000000000000003</IBAN></Id></CdtrAcct>
                                             <CdtrAgt><FinInstnId><BICFI>BANK_C</BICFI></FinInstnId></CdtrAgt>
                                             <RmtInf><Ustrd>Duży przelew rozrachunkowy</Ustrd></RmtInf>
                                             <SplmtryData>
@@ -277,46 +317,8 @@ public class SorbnetPaymentController {
                                     </FIToFICstmrCdtTrf>
                                 </Document>
                                 """
-                        ),
-                        @ExampleObject(
-                            name = "NBP → BANK_A (dokapitalizowanie)",
-                            value = """
-                                <Document>
-                                    <FIToFICstmrCdtTrf>
-                                        <GrpHdr>
-                                            <MsgId>SORB-20260611-0004</MsgId>
-                                            <CreDtTm>2026-06-11T12:30:00</CreDtTm>
-                                            <NbOfTxs>1</NbOfTxs>
-                                            <TtlIntrBkSttlmAmt Ccy="PLN">3000000.00</TtlIntrBkSttlmAmt>
-                                            <SttlmInf>
-                                                <SttlmMtd>CLRG</SttlmMtd>
-                                                <ClrSys><Cd>SORBNET</Cd></ClrSys>
-                                            </SttlmInf>
-                                        </GrpHdr>
-                                        <CdtTrfTxInf>
-                                            <PmtId>
-                                                <InstrId>SORB-20260611-0004</InstrId>
-                                                <EndToEndId>SORB-20260611-0004</EndToEndId>
-                                                <TxId>SORB-20260611-0004</TxId>
-                                            </PmtId>
-                                            <IntrBkSttlmAmt Ccy="PLN">3000000.00</IntrBkSttlmAmt>
-                                            <DbtrAcct><Id><IBAN>10100100000000000000000000</IBAN></Id></DbtrAcct>
-                                            <DbtrAgt><FinInstnId><BICFI>NBP</BICFI></FinInstnId></DbtrAgt>
-                                            <CdtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></CdtrAcct>
-                                            <CdtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></CdtrAgt>
-                                            <RmtInf><Ustrd>Zasilenie rachunku rozrachunkowego przez NBP</Ustrd></RmtInf>
-                                            <SplmtryData>
-                                                <Envlp>
-                                                    <ServiceCode>SORBNET</ServiceCode>
-                                                    <SenderBankId>NBP</SenderBankId>
-                                                    <ReceiverBankId>BANK_A</ReceiverBankId>
-                                                </Envlp>
-                                            </SplmtryData>
-                                        </CdtTrfTxInf>
-                                    </FIToFICstmrCdtTrf>
-                                </Document>
-                                """
                         )
+                        
                     }
                 )
             )
@@ -363,8 +365,8 @@ public class SorbnetPaymentController {
                                                 <IntrBkSttlmAmt Ccy="PLN">1000000.00</IntrBkSttlmAmt>
                                                 <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
                                                 <CdtrAgt><FinInstnId><BICFI>BANK_B</BICFI></FinInstnId></CdtrAgt>
-                                                <DbtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></DbtrAcct>
-                                                <CdtrAcct><Id><IBAN>22222200000000000000000002</IBAN></Id></CdtrAcct>
+                                                <DbtrAcct><Id><IBAN>SORBNET-A-00000000000000000001</IBAN></Id></DbtrAcct>
+                                                <CdtrAcct><Id><IBAN>SORBNET-B-00000000000000000002</IBAN></Id></CdtrAcct>
                                                 <SplmtryData><Envlp><SourceServiceCode>SORBNET</SourceServiceCode></Envlp></SplmtryData>
                                             </OrgnlTxRef>
                                             <SettledAt>2026-06-11T13:00:01</SettledAt>
@@ -452,8 +454,8 @@ public class SorbnetPaymentController {
                                             <IntrBkSttlmAmt Ccy="PLN">1000000.00</IntrBkSttlmAmt>
                                             <DbtrAgt><FinInstnId><BICFI>BANK_A</BICFI></FinInstnId></DbtrAgt>
                                             <CdtrAgt><FinInstnId><BICFI>BANK_B</BICFI></FinInstnId></CdtrAgt>
-                                            <DbtrAcct><Id><IBAN>11111100000000000000000001</IBAN></Id></DbtrAcct>
-                                            <CdtrAcct><Id><IBAN>22222200000000000000000002</IBAN></Id></CdtrAcct>
+                                            <DbtrAcct><Id><IBAN>SORBNET-A-00000000000000000001</IBAN></Id></DbtrAcct>
+                                            <CdtrAcct><Id><IBAN>SORBNET-B-00000000000000000002</IBAN></Id></CdtrAcct>
                                             <SplmtryData><Envlp><SourceServiceCode>SORBNET</SourceServiceCode></Envlp></SplmtryData>
                                         </OrgnlTxRef>
                                         <SettledAt>2026-06-11T13:00:01</SettledAt>

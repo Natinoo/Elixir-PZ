@@ -7,11 +7,10 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import jakarta.servlet.http.HttpServletRequest;
+
 import pl.pz.sorbnet.dto.SorbnetPaymentDto;
 import pl.pz.sorbnet.model.*;
 import pl.pz.sorbnet.repository.*;
-import pl.pz.sorbnet.messeging.IntegrationResponseProducer;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -22,36 +21,32 @@ import java.util.*;
 public class SorbnetPaymentService {
 
     private static final Logger log = LoggerFactory.getLogger(SorbnetPaymentService.class);
+    private static final String SERVICE = "SORBNET";
 
     private final BankAccountRepository accountRepo;
     private final PaymentRepository paymentRepo;
     private final KafkaTemplate<String, String> kafka;
     private final ObjectMapper mapper;
-    private final BankSettlementAccountRepository bankSettlementAccountRepository;
-    private final IntegrationResponseProducer integrationResponseProducer;
     private final SimpMessagingTemplate ws;
 
     public SorbnetPaymentService(BankAccountRepository accountRepo,
-                             PaymentRepository paymentRepo,
-                             KafkaTemplate<String, String> kafka,
-                             IntegrationResponseProducer integrationResponseProducer,
-                             ObjectMapper mapper,
-                             SimpMessagingTemplate ws,
-                             BankSettlementAccountRepository bankSettlementAccountRepository) {
-    this.accountRepo = accountRepo;
-    this.paymentRepo = paymentRepo;
-    this.kafka = kafka;
-    this.mapper = mapper;
-    this.ws = ws;
-    this.bankSettlementAccountRepository = bankSettlementAccountRepository;
-    this.integrationResponseProducer = integrationResponseProducer;
+                                 PaymentRepository paymentRepo,
+                                 KafkaTemplate<String, String> kafka,
+                                 ObjectMapper mapper,
+                                 SimpMessagingTemplate ws) {
+        this.accountRepo = accountRepo;
+        this.paymentRepo = paymentRepo;
+        this.kafka = kafka;
+        this.mapper = mapper;
+        this.ws = ws;
     }
 
     public Map<String, Object> process(SorbnetPaymentDto dto) {
         if (dto.getPaymentId() == null) dto.setPaymentId(UUID.randomUUID().toString());
 
-          dto.setSenderBankId(normalizeBankId(dto.getSenderBankId()));
-          dto.setReceiverBankId(normalizeBankId(dto.getReceiverBankId()));
+        dto.setSenderBankId(normalizeBankId(dto.getSenderBankId()));
+        dto.setReceiverBankId(normalizeBankId(dto.getReceiverBankId()));
+
         if (paymentRepo.existsById(dto.getPaymentId())) {
             Payment existing = paymentRepo.findById(dto.getPaymentId()).get();
             return Map.of(
@@ -60,20 +55,23 @@ public class SorbnetPaymentService {
                 "message", "Przelew już przetworzony (idempotent)"
             );
         }
-        // jedno zapytanie po numerze rachunku
-        BankAccount sender = accountRepo
-                .findByServiceCodeAndAccountNumber("SORBNET", dto.getSenderAccount())
-                .orElseThrow(() -> new RuntimeException("Nieznany rachunek nadawcy: " + dto.getSenderAccount()));
 
-        BankAccount receiver = accountRepo
-                .findByServiceCodeAndAccountNumber("SORBNET", dto.getReceiverAccount())
-                .orElseThrow(() -> new RuntimeException("Nieznany rachunek odbiorcy: " + dto.getReceiverAccount()));
+        BankAccount sender = accountRepo.findByServiceCodeAndBankId(SERVICE, dto.getSenderBankId())
+                .orElseThrow(() -> new RuntimeException("Nieznany bank: " + dto.getSenderBankId()));
+        BankAccount receiver = accountRepo.findByServiceCodeAndBankId(SERVICE, dto.getReceiverBankId())
+                .orElseThrow(() -> new RuntimeException("Nieznany bank: " + dto.getReceiverBankId()));
 
-        // walidacja czy rachunek należy do właściwego banku
-        if (!sender.getBankId().equals(dto.getSenderBankId())) {
+        // Każdy bank ma w SORBNET dokładnie 1 rachunek — jeśli komunikat nie
+        // niesie IBAN-ów, rozstrzygamy po bankId; jeśli niesie cudze, odrzucamy.
+        String senderAcc = isBlank(dto.getSenderAccount()) ? sender.getAccountNumber() : dto.getSenderAccount();
+        String receiverAcc = isBlank(dto.getReceiverAccount()) ? receiver.getAccountNumber() : dto.getReceiverAccount();
+        dto.setSenderAccount(senderAcc);
+        dto.setReceiverAccount(receiverAcc);
+
+        if (!senderAcc.equals(sender.getAccountNumber())) {
             return reject(dto, "SENDER_ACCOUNT_MISMATCH");
         }
-        if (!receiver.getBankId().equals(dto.getReceiverBankId())) {
+        if (!receiverAcc.equals(receiver.getAccountNumber())) {
             return reject(dto, "RECEIVER_ACCOUNT_MISMATCH");
         }
 
@@ -114,21 +112,28 @@ public class SorbnetPaymentService {
         checkDebtAlert(sender);
 
         return Map.of(
-        "paymentId", payment.getPaymentId(),
-        "status", "SETTLED",
-        "message", "Payment processed",
-        "senderBankId", payment.getSenderBankId(),
-        "receiverBankId", payment.getReceiverBankId(),
-        "senderAccount", payment.getSenderAccount(),
-        "receiverAccount", payment.getReceiverAccount(),
-        "amount", payment.getAmount(),
-        "settledAt", payment.getSettledAt().toString()
-    );
+            "paymentId", payment.getPaymentId(),
+            "status", "SETTLED",
+            "message", "Payment processed",
+            "senderBankId", payment.getSenderBankId(),
+            "receiverBankId", payment.getReceiverBankId(),
+            "senderAccount", payment.getSenderAccount(),
+            "receiverAccount", payment.getReceiverAccount(),
+            "amount", payment.getAmount(),
+            "settledAt", payment.getSettledAt().toString()
+        );
     }
 
     public Map<String, Object> simulateDeposit(String targetBankId, BigDecimal amount, String sourceBankId) {
-        BankAccount target = accountRepo.findByServiceCodeAndBankId("SORBNET", targetBankId)
+        String source = normalizeBankId(sourceBankId != null ? sourceBankId : "NBP");
+
+        BankAccount target = accountRepo.findByServiceCodeAndBankId(SERVICE, normalizeBankId(targetBankId))
             .orElseThrow(() -> new RuntimeException("Nieznany bank: " + targetBankId));
+
+        // rachunek źródłowy — jeśli źródło istnieje w SORBNET, bierzemy jego konto
+        String sourceAccount = accountRepo.findByServiceCodeAndBankId(SERVICE, source)
+                .map(BankAccount::getAccountNumber)
+                .orElse(source); // fallback: identyfikator źródła zamiast numeru
 
         BigDecimal before = target.getBalance();
         target.setBalance(before.add(amount));
@@ -142,26 +147,40 @@ public class SorbnetPaymentService {
 
         Payment p = new Payment();
         p.setPaymentId(UUID.randomUUID().toString());
-        p.setSenderBankId(sourceBankId != null ? sourceBankId : "NBP");
-        p.setReceiverBankId(targetBankId);
+        p.setSenderBankId(source);
+        p.setReceiverBankId(target.getBankId());
+        p.setSenderAccount(sourceAccount);                 // not-null w nowym modelu
+        p.setReceiverAccount(target.getAccountNumber());   // not-null w nowym modelu
         p.setAmount(amount);
         p.setCurrency("PLN");
         p.setTitle("Symulacja wpłaty kapitału");
+        p.setSourceService(SERVICE);
         p.setStatus(PaymentStatus.SETTLED);
         p.setCreatedAt(LocalDateTime.now());
         p.setSettledAt(LocalDateTime.now());
         paymentRepo.save(p);
 
-        notify("notifications.banks", targetBankId, Map.of(
+        notify("notifications.banks", target.getBankId(), Map.of(
             "type", "DEPOSIT_RECEIVED",
-            "bankId", targetBankId,
+            "bankId", target.getBankId(),
             "amount", amount,
             "newBalance", target.getBalance(),
-            "sourceBankId", sourceBankId != null ? sourceBankId : "NBP"
+            "sourceBankId", source
+        ));
+
+        ws.convertAndSend("/topic/payments", Map.of(
+            "paymentId", p.getPaymentId(),
+            "status", "SETTLED",
+            "senderBankId", p.getSenderBankId(),
+            "receiverBankId", p.getReceiverBankId(),
+            "amount", p.getAmount(),
+            "currency", p.getCurrency(),
+            "title", p.getTitle(),
+            "settledAt", p.getSettledAt().toString()
         ));
 
         return Map.of(
-            "bankId", targetBankId,
+            "bankId", target.getBankId(),
             "depositedAmount", amount,
             "balanceBefore", before,
             "balanceAfter", target.getBalance(),
@@ -170,19 +189,20 @@ public class SorbnetPaymentService {
     }
 
     public Map<String, Object> getAccountStatus(String bankId) {
-        BankAccount bank = accountRepo.findByServiceCodeAndBankId("SORBNET", bankId)
+        BankAccount bank = accountRepo.findByServiceCodeAndBankId(SERVICE, normalizeBankId(bankId))
             .orElseThrow(() -> new RuntimeException("Nieznany bank: " + bankId));
-    
+
         BigDecimal available = bank.getBalance().add(bank.getDebtLimit());
         BigDecimal minDeposit = BigDecimal.ZERO;
-    
+
         if (bank.getBalance().compareTo(bank.getDebtLimit().negate()) < 0) {
             minDeposit = bank.getBalance().negate().subtract(bank.getDebtLimit());
         }
-    
+
         Map<String, Object> result = new HashMap<>();
         result.put("bankId", bank.getBankId());
         result.put("bankName", bank.getBankName());
+        result.put("accountNumber", bank.getAccountNumber());
         result.put("balance", bank.getBalance());
         result.put("debtLimit", bank.getDebtLimit());
         result.put("availableCredit", available);
@@ -191,6 +211,13 @@ public class SorbnetPaymentService {
         result.put("overlimitSince", bank.getOverlimitSince() != null
                 ? bank.getOverlimitSince().toString() : null);
         return result;
+    }
+
+    // ===== prywatne =====
+
+    /** true gdy null lub same białe znaki. */
+    private boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 
     private Map<String, Object> holdGridlock(SorbnetPaymentDto dto, BankAccount sender) {
@@ -216,28 +243,26 @@ public class SorbnetPaymentService {
             "debtLimit", sender.getDebtLimit()
         ));
 
-        // WebSocket push do GUI banku 
-    ws.convertAndSend("/topic/alerts/" + sender.getBankId(), Map.of(
-        "alert", true,
-        "type", "DEBT_LIMIT_EXCEEDED",
-        "message", "Przekroczono limit zadłużenia. Należy niezwłocznie uzupełnić środki.",
-        "balance", sender.getBalance(),
-        "debtLimit", sender.getDebtLimit(),
-        "overlimitSince", sender.getOverlimitSince().toString(),
-        "blockedIfNotResolvedBy", sender.getOverlimitSince().plusHours(2).toString()
-    ));
+        ws.convertAndSend("/topic/alerts/" + sender.getBankId(), Map.of(
+            "alert", true,
+            "type", "DEBT_LIMIT_EXCEEDED",
+            "message", "Przekroczono limit zadłużenia. Należy niezwłocznie uzupełnić środki.",
+            "balance", sender.getBalance(),
+            "debtLimit", sender.getDebtLimit(),
+            "overlimitSince", sender.getOverlimitSince().toString(),
+            "blockedIfNotResolvedBy", sender.getOverlimitSince().plusHours(2).toString()
+        ));
 
-
-            return Map.of(
-        "paymentId", payment.getPaymentId(),
-        "status", "GRIDLOCK_HELD",
-        "message", "Payment held in gridlock queue",
-        "senderBankId", payment.getSenderBankId(),
-        "receiverBankId", payment.getReceiverBankId(),
-        "senderAccount", payment.getSenderAccount(),
-        "receiverAccount", payment.getReceiverAccount(),
-        "amount", payment.getAmount()
-    );
+        return Map.of(
+            "paymentId", payment.getPaymentId(),
+            "status", "GRIDLOCK_HELD",
+            "message", "Payment held in gridlock queue",
+            "senderBankId", payment.getSenderBankId(),
+            "receiverBankId", payment.getReceiverBankId(),
+            "senderAccount", payment.getSenderAccount(),
+            "receiverAccount", payment.getReceiverAccount(),
+            "amount", payment.getAmount()
+        );
     }
 
     private Map<String, Object> reject(SorbnetPaymentDto dto, String reason) {
@@ -245,16 +270,16 @@ public class SorbnetPaymentService {
         payment.setRejectionReason(reason);
         paymentRepo.save(payment);
         return Map.of(
-        "paymentId", payment.getPaymentId(),
-        "status", "REJECTED",
-        "message", reason,
-        "senderBankId", payment.getSenderBankId(),
-        "receiverBankId", payment.getReceiverBankId(),
-        "senderAccount", payment.getSenderAccount(),
-        "receiverAccount", payment.getReceiverAccount(),
-        "amount", payment.getAmount()
-    );
-        }
+            "paymentId", payment.getPaymentId(),
+            "status", "REJECTED",
+            "message", reason,
+            "senderBankId", payment.getSenderBankId(),
+            "receiverBankId", payment.getReceiverBankId(),
+            "senderAccount", payment.getSenderAccount(),
+            "receiverAccount", payment.getReceiverAccount(),
+            "amount", payment.getAmount()
+        );
+    }
 
     private void checkDebtAlert(BankAccount bank) {
         BigDecimal threshold = bank.getDebtLimit().multiply(BigDecimal.valueOf(0.8));
@@ -265,14 +290,13 @@ public class SorbnetPaymentService {
                 "balance", bank.getBalance(),
                 "debtLimit", bank.getDebtLimit()
             ));
-        // WebSocket push
-        ws.convertAndSend("/topic/alerts/" + bank.getBankId(), Map.of(
-            "alert", true,
-            "type", "APPROACHING_DEBT_LIMIT",
-            "message", "Saldo zbliża się do limitu zadłużenia.",
-            "balance", bank.getBalance(),
-            "debtLimit", bank.getDebtLimit()
-        ));   
+            ws.convertAndSend("/topic/alerts/" + bank.getBankId(), Map.of(
+                "alert", true,
+                "type", "APPROACHING_DEBT_LIMIT",
+                "message", "Saldo zbliża się do limitu zadłużenia.",
+                "balance", bank.getBalance(),
+                "debtLimit", bank.getDebtLimit()
+            ));
         }
     }
 
@@ -285,16 +309,18 @@ public class SorbnetPaymentService {
         p.setCurrency(dto.getCurrency() != null ? dto.getCurrency() : "PLN");
         p.setSenderAccount(dto.getSenderAccount());
         p.setReceiverAccount(dto.getReceiverAccount());
-        p.setTitle(dto.getTitle());
+        p.setSenderName(dto.getSenderName());
+        p.setReceiverName(dto.getReceiverName());
+        p.setTitle(dto.getTitle() != null ? dto.getTitle() : "Przelew SORBNET");
+        p.setSourceService(dto.getType() == null || dto.getType().isBlank() ? SERVICE : dto.getType());
         p.setStatus(status);
         p.setCreatedAt(LocalDateTime.now());
         return p;
     }
-    
-    private String normalizeBankId(String bankId) {
-    return bankId == null ? null : bankId.trim().toUpperCase();
-    }
 
+    private String normalizeBankId(String bankId) {
+        return bankId == null ? null : bankId.trim().toUpperCase();
+    }
 
     private void notify(String topic, String key, Map<String, Object> payload) {
         try { kafka.send(topic, key, mapper.writeValueAsString(payload)); }

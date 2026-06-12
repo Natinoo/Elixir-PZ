@@ -329,6 +329,9 @@ tr.fresh td { background: var(--green-soft); transition: background 2s ease 1s; 
   justify-content: center;
   z-index: 50;
 }
+.overlay[hidden] {
+  display: none !important;
+}
 
 .alert-box {
   background: #fff;
