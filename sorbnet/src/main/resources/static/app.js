@@ -1,7 +1,6 @@
-/* SORBNET — panel pracownika banku.
-   REST: /api/sorbnet/...  ·  WebSocket STOMP: patrz WS_ENDPOINT (sprawdź ścieżkę w WebSocketConfig). */
+// SORBNET — panel pracownika banku.
 
-const WS_ENDPOINT = "/ws"; // TODO: dopasuj do registerStompEndpoints(...) w WebSocketConfig
+const WS_ENDPOINT = "/ws"; 
 const BLOCK_AFTER_MS = 2 * 60 * 60 * 1000; // 2 h od przekroczenia limitu do automatycznej blokady
 
 const $ = (id) => document.getElementById(id);

@@ -151,7 +151,7 @@ async function loadNetting() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="pid">${esc(r.requestId)}</td>
-      <td class="pid">${esc(r.sessionId || "—")}</td>
+      <td class="pid">${esc(r.sessionId || r.originPaymentId || "—")}</td>
       <td>${esc(r.bankId)}</td>
       <td class="liq-service">${esc(r.requestingServiceCode)}</td>
       <td class="num">${fmtPLN.format(r.amount)} ${esc(r.currency)}</td>
@@ -163,8 +163,13 @@ async function loadNetting() {
 }
 
 async function getAllLiquidity() {
-    const res = await fetch("/liquidity/requests/all");
-    return res.json();
+  // pełna historia = suma historii per bank; brak endpointu "all", więc składamy z banków
+  const banks = (await getJson("/api/sorbnet/operator/banks"))
+    .filter(b => (!b.serviceCode || b.serviceCode === "SORBNET") && b.bankId !== "NBP");
+  const lists = await Promise.all(
+    banks.map(b => getJson(`/api/sorbnet/liquidity/requests/bank/${encodeURIComponent(b.bankId)}`).catch(() => []))
+  );
+  return lists.flat().sort((a, b) => (b.receivedAt || "").localeCompare(a.receivedAt || ""));
 }
 
 /* ── Gridlock + sesje do upłynnienia ──────────────────── */
@@ -197,7 +202,7 @@ async function loadGridlock() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="pid">${esc(r.requestId)}</td>
-      <td class="pid">${esc(r.sessionId || "—")}</td>
+      <td class="pid">${esc(r.sessionId || r.originPaymentId || "—")}</td>
       <td>${esc(r.bankId)}</td>
       <td class="liq-service">${esc(r.requestingServiceCode)}</td>
       <td class="num neg">${fmtPLN.format(r.amount)} ${esc(r.currency)}</td>
