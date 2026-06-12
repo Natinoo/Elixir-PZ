@@ -47,6 +47,7 @@ public class LiquidityRequest {
             example = "BANK_A",
             requiredMode = Schema.RequiredMode.REQUIRED
     )
+    
     private String bankId;
 
     @Column(name = "requesting_service_code", nullable = false, length = 32)
@@ -145,6 +146,13 @@ public class LiquidityRequest {
             nullable = true
     )
     private String paymentId;
+
+    @Column(name = "origin_payment_id", length = 255)
+    @Schema(
+        description = "Identyfikator przelewu Expressa który zainicjował ten request.",
+        nullable = true
+    )
+    private String originPaymentId;
 
     public LiquidityRequest() {
     }
@@ -268,4 +276,7 @@ public class LiquidityRequest {
     public void setPaymentId(String paymentId) {
         this.paymentId = paymentId;
     }
+
+    public String getOriginPaymentId() { return originPaymentId; }
+    public void setOriginPaymentId(String originPaymentId) { this.originPaymentId = originPaymentId; }
 }

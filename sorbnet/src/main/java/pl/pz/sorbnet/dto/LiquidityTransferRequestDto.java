@@ -81,6 +81,10 @@ public class LiquidityTransferRequestDto {
         return trf().sourceHasFunds;
     }
 
+    public String getPaymentId() {
+    return trf().paymentId;
+    }
+
     private Transfer trf() {
         if (request == null) {
             request = new LiquidityCreditTransferRequest();
@@ -116,6 +120,9 @@ public class LiquidityTransferRequestDto {
 
         @XmlElement(name = "SessionId")
         private String sessionId;
+
+        @XmlElement(name = "PaymentId")   
+        private String paymentId;
 
         @XmlElement(name = "BankId")
         private String bankId;

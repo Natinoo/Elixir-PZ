@@ -34,13 +34,7 @@ public class OpenApiConfig {
 
                             Komunikacja wewnętrzna z systemami Elixir i Express Elixir odbywa się asynchronicznie
                             przez Kafka i jest dokumentowana osobno poza OpenAPI.
-                            """)
-                        .contact(new Contact()
-                                .name("Zespół SORBNet")
-                                .email("sorbnet@local.dev"))
-                        .license(new License()
-                                .name("Internal project documentation")
-                                .url("https://example.local")))
+                            """))
                 .servers(List.of(
                         new Server()
                                 .url("/")

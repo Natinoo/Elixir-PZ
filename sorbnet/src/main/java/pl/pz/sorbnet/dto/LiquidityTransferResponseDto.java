@@ -116,6 +116,9 @@ public class LiquidityTransferResponseDto {
     public void setSettledAt(String settledAt) {
         trf().settledAt = settledAt;
     }
+    public String getPaymentId() { return trf().paymentId; }
+
+    public void setPaymentId(String paymentId) { trf().paymentId = paymentId; }
 
     private TransferStatus trf() {
         if (response == null) {
@@ -161,6 +164,9 @@ public class LiquidityTransferResponseDto {
 
         @XmlElement(name = "SourceAccount")
         private String sourceAccount;
+
+        @XmlElement(name = "PaymentId")   
+        private String paymentId;
 
         @XmlElement(name = "TargetAccount")
         private String targetAccount;

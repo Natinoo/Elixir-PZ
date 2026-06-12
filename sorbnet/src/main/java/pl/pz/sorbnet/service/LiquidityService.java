@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.pz.sorbnet.dto.LiquidityTransferRequestDto;
 import pl.pz.sorbnet.dto.LiquidityTransferResponseDto;
+import pl.pz.sorbnet.dto.PaymentResponseDto;
 import pl.pz.sorbnet.messeging.IntegrationResponseProducer;
 import pl.pz.sorbnet.model.BankAccount;
 import pl.pz.sorbnet.model.LiquidityRequest;
@@ -33,19 +34,31 @@ import java.util.UUID;
 /**
  * Obsługa requestów płynnościowych z ELIXIR / ELIXIR EXPRESS.
  *
- * Przepływ:
- * 1. ELIXIR wykrywa brak płynności w sesji i wysyła request (Kafka, ISO 20022).
- * 2. SORBNET zapisuje request jako PENDING i pokazuje go w GUI (WebSocket).
- * 3. Operator banku w GUI wyklikuje przelew -> execute() obciąża rachunek
- *    banku w SORBNET i wysyła odpowiedź SETTLED do serwisu źródłowego.
- * 4. ELIXIR po otrzymaniu odpowiedzi zasila techniczne konto banku
- *    i domyka sesję czekającą na płynność.
+ * Różnice między serwisami:
+ * - ELIXIR koreluje request z SESJĄ (SessionId) i oczekuje odpowiedzi
+ *   Document/LiquidityCreditTransferResponse z ReqId,
+ * - EXPRESS koreluje request z PRZELEWEM (PaymentId), nie wysyła SourceAccount
+ *   i oczekuje odpowiedzi pain.002 (Document/CstmrPmtStsRpt) z OrgnlPmtInfId
+ *   równym paymentId przelewu — na jej podstawie odblokowuje GRIDLOCK_HELD.
  */
 @Service
 @Transactional
 public class LiquidityService {
 
     private static final Logger log = LoggerFactory.getLogger(LiquidityService.class);
+    private static final String EXPRESS = "EXPRESS";
+
+    private static final JAXBContext LIQUIDITY_JAXB_CTX;
+    static {
+        try {
+            LIQUIDITY_JAXB_CTX = JAXBContext.newInstance(
+                    LiquidityTransferResponseDto.class,
+                    PaymentResponseDto.class
+            );
+        } catch (JAXBException e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
 
     private final LiquidityRequestRepository liquidityRepo;
     private final BankAccountRepository accountRepo;
@@ -65,55 +78,47 @@ public class LiquidityService {
         this.ws = ws;
     }
 
-    /**
-     * Rejestruje request płynnościowy odebrany z Kafki i powiadamia GUI.
-     * Idempotentnie: ponowny request o tym samym ReqId jest ignorowany
-     * (ELIXIR i tak zabezpiecza się przed dublowaniem, ale tu mamy drugą linię).
-     *
-     * @param source serwis, z którego topicu przyszedł komunikat (ELIXIR / ELIXIR_EXPRESS)
-     */
     public void registerRequest(LiquidityTransferRequestDto dto, String source) {
-    String requestId = dto.getRequestId() != null && !dto.getRequestId().isBlank()
-            ? dto.getRequestId()
-            : UUID.randomUUID().toString();
+        String requestId = dto.getRequestId() != null && !dto.getRequestId().isBlank()
+                ? dto.getRequestId()
+                : UUID.randomUUID().toString();
 
-    if (liquidityRepo.existsById(requestId)) {
-        log.info("[LIQUIDITY][{}] request {} już zarejestrowany (idempotent)", source, requestId);
-        return;
-    }
+        if (liquidityRepo.existsById(requestId)) {
+            log.info("[LIQUIDITY][{}] request {} już zarejestrowany (idempotent)", source, requestId);
+            return;
+        }
 
-    String serviceCode = dto.getTargetServiceCode() != null && !dto.getTargetServiceCode().isBlank()
-            ? dto.getTargetServiceCode()
-            : source;
+        String serviceCode = dto.getTargetServiceCode() != null && !dto.getTargetServiceCode().isBlank()
+                ? dto.getTargetServiceCode()
+                : source;
 
-    LiquidityRequest req = new LiquidityRequest();
-    req.setRequestId(requestId);
+        LiquidityRequest req = new LiquidityRequest();
+        req.setRequestId(requestId);
+        req.setOriginalMessageId(requestId);
+        req.setSessionId(dto.getSessionId());
+        req.setOriginPaymentId(dto.getPaymentId()); // EXPRESS: ID przelewu czekającego na płynność
+        req.setBankId(normalize(dto.getBankId()));
+        req.setRequestingServiceCode(serviceCode);
+        req.setSourceAccount(dto.getSourceAccount());
+        req.setTargetAccount(dto.getTargetAccount());
+        req.setAmount(dto.getAmount());
+        req.setCurrency(dto.getCurrency() != null && !dto.getCurrency().isBlank() ? dto.getCurrency() : "PLN");
+        req.setMessage(dto.getMessage());
+        req.setSourceHasFunds(dto.getSourceHasFunds());
+        req.setStatus(LiquidityRequestStatus.PENDING);
+        req.setReceivedAt(LocalDateTime.now());
 
-    // ponieważ w DTO nie masz getMessageId(), na razie fallback:
-    req.setOriginalMessageId(requestId);
+        liquidityRepo.save(req);
 
-    req.setSessionId(dto.getSessionId());
-    req.setBankId(normalize(dto.getBankId()));
-    req.setRequestingServiceCode(serviceCode);
-    req.setSourceAccount(dto.getSourceAccount());
-    req.setTargetAccount(dto.getTargetAccount());
-    req.setAmount(dto.getAmount());
-    req.setCurrency(dto.getCurrency() != null && !dto.getCurrency().isBlank() ? dto.getCurrency() : "PLN");
-    req.setMessage(dto.getMessage());
-    req.setSourceHasFunds(dto.getSourceHasFunds());
-    req.setStatus(LiquidityRequestStatus.PENDING);
-    req.setReceivedAt(LocalDateTime.now());
+        log.info("[LIQUIDITY][{}] zarejestrowano request {} bank={} kwota={} {} sessionId={} paymentId={} sourceHasFunds={}",
+                source, requestId, req.getBankId(), req.getAmount(), req.getCurrency(),
+                req.getSessionId(), req.getOriginPaymentId(), req.getSourceHasFunds());
 
-    liquidityRepo.save(req);
-
-    log.info("[LIQUIDITY][{}] zarejestrowano request {} bank={} kwota={} {} sessionId={} sourceHasFunds={}",
-            source, requestId, req.getBankId(), req.getAmount(), req.getCurrency(),
-            req.getSessionId(), req.getSourceHasFunds());
-
-    Map<String, Object> payload = new HashMap<>();
+        Map<String, Object> payload = new HashMap<>();
         payload.put("type", "LIQUIDITY_REQUEST");
         payload.put("requestId", requestId);
         payload.put("sessionId", req.getSessionId() != null ? req.getSessionId() : "");
+        payload.put("originPaymentId", req.getOriginPaymentId() != null ? req.getOriginPaymentId() : "");
         payload.put("bankId", String.valueOf(req.getBankId()));
         payload.put("requestingServiceCode", req.getRequestingServiceCode());
         payload.put("sourceAccount", req.getSourceAccount() != null ? req.getSourceAccount() : "");
@@ -126,21 +131,17 @@ public class LiquidityService {
 
         ws.convertAndSend("/topic/liquidity", payload);
 
-    ws.convertAndSend("/topic/alerts/" + req.getBankId(), Map.of(
-            "alert", true,
-            "type", "LIQUIDITY_REQUEST",
-            "requestId", requestId,
-            "requestingServiceCode", req.getRequestingServiceCode(),
-            "amount", req.getAmount() != null ? req.getAmount() : BigDecimal.ZERO,
-            "message", "Serwis " + req.getRequestingServiceCode()
-                    + " zgłosił brak płynności. Wykonaj przelew zasilający z poziomu panelu."
-    ));
-}
+        ws.convertAndSend("/topic/alerts/" + req.getBankId(), Map.of(
+                "alert", true,
+                "type", "LIQUIDITY_REQUEST",
+                "requestId", requestId,
+                "requestingServiceCode", req.getRequestingServiceCode(),
+                "amount", req.getAmount() != null ? req.getAmount() : BigDecimal.ZERO,
+                "message", "Serwis " + req.getRequestingServiceCode()
+                        + " zgłosił brak płynności. Wykonaj przelew zasilający z poziomu panelu."
+        ));
+    }
 
-    /**
-     * Operator banku wykonuje (wyklikuje) przelew zasilający techniczne konto
-     * banku w serwisie ELIXIR. Obciąża rachunek banku w SORBNET.
-     */
     public Map<String, Object> execute(String requestId) {
         LiquidityRequest req = getPending(requestId);
 
@@ -164,12 +165,16 @@ public class LiquidityService {
         bank.setBalance(newBalance);
         accountRepo.save(bank);
 
-        // Zapis przelewu płynnościowego w historii SORBNET
+        // EXPRESS nie przysyła SourceAccount — bierzemy rachunek banku w SORBNET
+        String senderAccount = req.getSourceAccount() != null && !req.getSourceAccount().isBlank()
+                ? req.getSourceAccount()
+                : bank.getAccountNumber();
+
         Payment payment = new Payment();
         payment.setPaymentId("LIQ-" + UUID.randomUUID());
         payment.setSenderBankId(bank.getBankId());
         payment.setReceiverBankId(bank.getBankId()); // ten sam bank, inny system
-        payment.setSenderAccount(req.getSourceAccount());
+        payment.setSenderAccount(senderAccount);
         payment.setReceiverAccount(req.getTargetAccount());
         payment.setAmount(req.getAmount());
         payment.setCurrency(req.getCurrency());
@@ -211,7 +216,6 @@ public class LiquidityService {
         );
     }
 
-    /** Operator odrzuca request płynnościowy. */
     public Map<String, Object> reject(String requestId, String reason) {
         LiquidityRequest req = getPending(requestId);
 
@@ -262,7 +266,30 @@ public class LiquidityService {
         return req;
     }
 
+    /**
+     * Odpowiedź do serwisu źródłowego — format zależy od serwisu:
+     * - EXPRESS: pain.002 (CstmrPmtStsRpt) z OrgnlPmtInfId = paymentId przelewu,
+     *   bo Express na tej podstawie odblokowuje przelew GRIDLOCK_HELD,
+     * - ELIXIR: LiquidityCreditTransferResponse z ReqId (korelacja po sesji).
+     */
     private void sendResponse(LiquidityRequest req, String status, String message, String settledAt) {
+        boolean isExpress = req.getRequestingServiceCode() != null
+                && req.getRequestingServiceCode().toUpperCase().contains(EXPRESS);
+
+        String xml = isExpress
+                ? buildExpressResponse(req, status, message, settledAt)
+                : buildElixirResponse(req, status, message, settledAt);
+
+        log.info("[LIQUIDITY][{}] response payload={}", req.getRequestingServiceCode(), xml);
+
+        if (isExpress) {
+            responseProducer.sendToExpress(req.getRequestId(), xml);
+        } else {
+            responseProducer.sendToElixir(req.getRequestId(), xml);
+        }
+    }
+
+    private String buildElixirResponse(LiquidityRequest req, String status, String message, String settledAt) {
         LiquidityTransferResponseDto response = new LiquidityTransferResponseDto(req.getRequestId());
         response.setBankId(req.getBankId());
         response.setSourceServiceCode("SORBNET");
@@ -273,43 +300,46 @@ public class LiquidityService {
         response.setStatus(status);
         response.setMessage(message);
         response.setSettledAt(settledAt);
-
-        String xml = marshal(response);
-        log.info("[LIQUIDITY][{}] response payload={}", req.getRequestingServiceCode(), xml);
-
-        if ("ELIXIR_EXPRESS".equalsIgnoreCase(req.getRequestingServiceCode())) {
-            responseProducer.sendToExpress(req.getRequestId(), xml);
-        } else {
-            responseProducer.sendToElixir(req.getRequestId(), xml);
-        }
+        return marshal(response);
     }
 
-    private static final JAXBContext LIQUIDITY_JAXB_CTX;
-        static {
-            try {
-                LIQUIDITY_JAXB_CTX = JAXBContext.newInstance(LiquidityTransferResponseDto.class);
-            } catch (JAXBException e) {
-                throw new ExceptionInInitializerError(e);
-            }
-        }
+    private String buildExpressResponse(LiquidityRequest req, String status, String message, String settledAt) {
+        // korelacja: paymentId przelewu Expressa; fallback na ReqId
+        String correlationId = req.getOriginPaymentId() != null && !req.getOriginPaymentId().isBlank()
+                ? req.getOriginPaymentId()
+                : req.getRequestId();
 
-    private String marshal(LiquidityTransferResponseDto dto) {
-            try {
-                Marshaller marshaller = LIQUIDITY_JAXB_CTX.createMarshaller();
-                marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);
-                StringWriter sw = new StringWriter();
-                marshaller.marshal(dto, sw);
-                return sw.toString();
-            } catch (Exception e) {
-                throw new RuntimeException("XML marshal error (liquidity response)", e);
-            }
+        PaymentResponseDto response = new PaymentResponseDto();
+        response.setPaymentId(correlationId);
+        response.setStatus(status);
+        response.setMessage(message);
+        response.setSenderBankId(req.getBankId());
+        response.setReceiverBankId(req.getBankId());
+        response.setSenderAccount(req.getSourceAccount());
+        response.setReceiverAccount(req.getTargetAccount());
+        response.setAmount(req.getAmount());
+        response.setCurrency(req.getCurrency());
+        response.setSourceServiceCode("SORBNET");
+        response.setSettledAt(settledAt);
+        return marshal(response);
+    }
+
+    private String marshal(Object dto) {
+        try {
+            Marshaller marshaller = LIQUIDITY_JAXB_CTX.createMarshaller();
+            marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);
+            StringWriter sw = new StringWriter();
+            marshaller.marshal(dto, sw);
+            return sw.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("XML marshal error (liquidity response)", e);
         }
+    }
 
     private String normalize(String bankId) {
         return bankId == null ? null : bankId.trim().toUpperCase();
     }
-
     public List<LiquidityRequest> getAllRequests() {
     return liquidityRepo.findAll();
-}
+    }
 }
