@@ -308,4 +308,8 @@ public class LiquidityService {
     private String normalize(String bankId) {
         return bankId == null ? null : bankId.trim().toUpperCase();
     }
+
+    public List<LiquidityRequest> getAllRequests() {
+    return liquidityRepo.findAll();
+}
 }

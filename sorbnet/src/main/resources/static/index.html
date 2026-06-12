@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SORBNET — panel banku</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">SORBNET</span>
+    <span class="brand-sub">RTGS · panel pracownika banku</span>
+  </div>
+  <div class="topbar-right">
+    <label class="bank-picker">
+      Bank
+      <select id="bankSelect"></select>
+    </label>
+    <a class="panel-link" href="operator.html">→ panel operatora</a>
+    <span id="wsDot" class="ws-dot" title="Połączenie czasu rzeczywistego">●</span>
+  </div>
+</header>
+
+<!-- Pasek płynności: sygnatura panelu, w stanie alarmowym odlicza 2h do blokady -->
+<div id="liquidityStrip" class="liquidity-strip ok">
+  <span id="stripStatus" class="strip-status">PŁYNNOŚĆ W NORMIE</span>
+  <span id="stripDetail" class="strip-detail"></span>
+  <span id="stripCountdown" class="strip-countdown" hidden></span>
+</div>
+
+<main class="layout">
+
+  <!-- Rachunek rozliczeniowy -->
+  <section class="card" id="accountCard">
+    <h2>Rachunek rozliczeniowy</h2>
+    <dl class="ledger">
+      <div><dt>Saldo</dt><dd id="balance" class="num">—</dd></div>
+      <div><dt>Limit zadłużenia</dt><dd id="debtLimit" class="num">—</dd></div>
+      <div><dt>Dostępne środki</dt><dd id="availableCredit" class="num">—</dd></div>
+      <div><dt>Min. wpłata do limitu</dt><dd id="minDeposit" class="num">—</dd></div>
+      <div><dt>Status</dt><dd id="bankStatus">—</dd></div>
+    </dl>
+
+    <h3>Nowy przelew SORBNET</h3>
+    <p class="hint">Przelew wysokokwotowy do innego banku, rozliczany natychmiast (RTGS). Zlecenie wysyłane jest jako komunikat ISO 20022.</p>
+    <form id="transferForm" class="deposit-form">
+      <label>Nadawca — imię i nazwisko
+        <input type="text" id="transferSenderName" maxlength="100" placeholder="Jan Kowalski">
+      </label>
+      <label>Bank odbiorcy
+        <select id="transferReceiver" required></select>
+      </label>
+      <label>Odbiorca — imię i nazwisko
+        <input type="text" id="transferReceiverName" maxlength="100" placeholder="Anna Nowak">
+      </label>
+      <label>Kwota
+        <input type="number" id="transferAmount" min="0.01" step="0.01" placeholder="0.00" required>
+      </label>
+      <label>Tytuł
+        <input type="text" id="transferTitle" maxlength="140" placeholder="Rozrachunek międzybankowy">
+      </label>
+      <div class="deposit-actions">
+        <button type="submit" class="btn primary">Wyślij przelew</button>
+      </div>
+    </form>
+
+    <h3>Zasil rachunek</h3>
+    <p class="hint">Domyślnym źródłem jest NBP (nieograniczone środki). Wystarczy wpłacić tyle, by zmieścić się w limicie zadłużenia.</p>
+    <form id="depositForm" class="deposit-form">
+      <label>Kwota
+        <input type="number" id="depositAmount" min="0.01" step="0.01" placeholder="0.00" required>
+      </label>
+      <label>Źródło
+        <select id="depositSource"></select>
+      </label>
+      <div class="deposit-actions">
+        <button type="button" id="fillToLimit" class="btn ghost">Uzupełnij do limitu</button>
+        <button type="submit" class="btn primary">Zasil rachunek</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Requesty płynnościowe z ELIXIR / ELIXIR EXPRESS -->
+  <section class="card" id="liquidityCard">
+    <h2>Wnioski o płynność <span class="from-tag">z ELIXIR · ELIXIR EXPRESS</span></h2>
+    <p class="hint">Serwis zgłasza brak środków na rozliczenie sesji. Wykonanie przelewu obciąża rachunek SORBNET i zasila konto techniczne banku w tym serwisie.</p>
+    <div id="liquidityList" class="liquidity-list">
+      <p class="empty">Brak oczekujących wniosków.</p>
+    </div>
+  </section>
+
+  <!-- Historia przelewów -->
+  <section class="card wide" id="paymentsCard">
+    <div class="card-head">
+      <h2>Przelewy</h2>
+      <label class="date-filter">od
+        <input type="date" id="fromDate">
+      </label>
+      <span class="hint">domyślnie bieżąca doba · historia do miesiąca wstecz</span>
+    </div>
+    <table class="payments">
+      <thead>
+        <tr>
+          <th>ID</th><th>Kierunek</th><th>Kontrahent</th><th>Tytuł</th>
+          <th>Serwis</th><th class="num">Kwota</th><th>Status</th><th>Rozliczono</th>
+        </tr>
+      </thead>
+      <tbody id="paymentsBody">
+        <tr><td colspan="8" class="empty">Ładowanie…</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<!-- Popup alertu -->
+<div id="alertOverlay" class="overlay" hidden>
+  <div class="alert-box" role="alertdialog" aria-modal="true">
+    <div id="alertBadge" class="alert-badge">ALERT</div>
+    <h2 id="alertTitle">Przekroczono limit zadłużenia</h2>
+    <p id="alertBody"></p>
+    <div id="alertDeadline" class="alert-deadline" hidden></div>
+    <div class="alert-actions">
+      <button id="alertTopUp" class="btn primary" hidden>Uzupełnij środki</button>
+      <button id="alertClose" class="btn ghost">Zamknij</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

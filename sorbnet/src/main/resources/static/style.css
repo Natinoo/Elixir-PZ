@@ -1,0 +1,490 @@
+/* SORBNET — panel pracownika banku
+   Paleta: papier #F2F4F3 · atrament #1B2430 · karmin #9E1B32 (obciążenia, alarm)
+           zieleń rozrachunku #1F7A5C (uznania) · bursztyn #B97309 (oczekujące) */
+
+:root {
+  --paper: #F2F4F3;
+  --card: #FFFFFF;
+  --ink: #1B2430;
+  --ink-soft: #5A6472;
+  --line: #D8DDDC;
+  --crimson: #9E1B32;
+  --crimson-soft: #F7E6EA;
+  --green: #1F7A5C;
+  --green-soft: #E4F1EB;
+  --amber: #B97309;
+  --amber-soft: #FBF0DC;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+/* ── Pasek górny ─────────────────────────────────────── */
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px;
+  background: var(--ink);
+  color: #fff;
+}
+
+.brand-mark {
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  font-size: 18px;
+}
+
+.brand-sub {
+  margin-left: 14px;
+  color: #9AA4B2;
+  font-size: 13px;
+}
+
+.topbar-right { display: flex; align-items: center; gap: 18px; }
+
+.bank-picker { font-size: 13px; color: #9AA4B2; }
+
+.bank-picker select {
+  margin-left: 8px;
+  background: #2A3442;
+  color: #fff;
+  border: 1px solid #3C4756;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-family: var(--mono);
+  font-size: 14px;
+}
+
+.ws-dot { color: #6B7686; font-size: 14px; }
+.ws-dot.on { color: #4ADE80; }
+
+/* ── Pasek płynności (sygnatura) ─────────────────────── */
+
+.liquidity-strip {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  padding: 10px 28px;
+  font-family: var(--mono);
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+}
+
+.liquidity-strip.ok       { background: var(--green-soft); color: var(--green); }
+.liquidity-strip.warn     { background: var(--amber-soft); color: var(--amber); }
+.liquidity-strip.danger   { background: var(--crimson); color: #fff; }
+.liquidity-strip.blocked  { background: var(--ink); color: #fff; }
+
+.strip-status { font-weight: 600; letter-spacing: 0.08em; }
+.strip-detail { opacity: 0.85; }
+
+.strip-countdown {
+  margin-left: auto;
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: 0.06em;
+}
+
+.liquidity-strip.danger .strip-countdown { animation: tick 1s steps(2) infinite; }
+
+@keyframes tick { 50% { opacity: 0.55; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .liquidity-strip.danger .strip-countdown { animation: none; }
+}
+
+/* ── Układ kart ──────────────────────────────────────── */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) 1fr;
+  gap: 20px;
+  padding: 20px 28px 40px;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 20px 22px;
+}
+
+.card.wide { grid-column: 1 / -1; }
+
+.card h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.card h3 {
+  margin: 22px 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.from-tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  letter-spacing: 0.06em;
+  margin-left: 8px;
+}
+
+.hint { margin: 0 0 12px; font-size: 12.5px; color: var(--ink-soft); }
+.empty { color: var(--ink-soft); font-size: 13.5px; }
+
+/* ── Rachunek (ledger) ───────────────────────────────── */
+
+.ledger { margin: 0; }
+
+.ledger > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.ledger dt { color: var(--ink-soft); font-size: 13px; }
+.ledger dd { margin: 0; }
+
+.num { font-family: var(--mono); font-size: 15px; font-weight: 500; }
+.num.neg { color: var(--crimson); }
+.num.pos { color: var(--green); }
+
+.status-pill {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.status-pill.ok      { background: var(--green-soft); color: var(--green); }
+.status-pill.warn    { background: var(--amber-soft); color: var(--amber); }
+.status-pill.danger  { background: var(--crimson-soft); color: var(--crimson); }
+.status-pill.blocked { background: var(--ink); color: #fff; }
+
+/* ── Formularz zasilenia ─────────────────────────────── */
+
+.deposit-form label {
+  display: block;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-bottom: 10px;
+}
+
+.deposit-form input,
+.deposit-form select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--ink);
+  background: #fff;
+}
+
+.deposit-form input:focus,
+.deposit-form select:focus,
+.btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.deposit-actions { display: flex; gap: 10px; margin-top: 4px; }
+
+.btn {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.btn.primary { background: var(--ink); color: #fff; }
+.btn.primary:hover { background: #2A3442; }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn.ghost:hover { border-color: var(--ink-soft); }
+.btn.settle { background: var(--green); color: #fff; }
+.btn.settle:hover { background: #18674D; }
+.btn.refuse { background: transparent; color: var(--crimson); border-color: var(--crimson); }
+.btn.refuse:hover { background: var(--crimson-soft); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Wnioski o płynność ──────────────────────────────── */
+
+.liq-item {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--amber);
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.liq-item.mine { border-left-color: var(--crimson); background: var(--crimson-soft); }
+
+.liq-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.liq-bank { font-weight: 600; }
+.liq-service {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+  letter-spacing: 0.06em;
+}
+.liq-amount { font-family: var(--mono); font-weight: 600; }
+.liq-msg { margin: 6px 0 10px; font-size: 12.5px; color: var(--ink-soft); }
+.liq-actions { display: flex; gap: 8px; }
+
+/* ── Tabela przelewów ────────────────────────────────── */
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  margin-bottom: 10px;
+}
+
+.card-head h2 { margin: 0; }
+
+.date-filter { font-size: 13px; color: var(--ink-soft); }
+.date-filter input {
+  margin-left: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.payments {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.payments th {
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border-bottom: 2px solid var(--ink);
+  padding: 6px 8px;
+}
+
+.payments td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.payments td.num, .payments th.num { text-align: right; font-family: var(--mono); }
+.payments .pid { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); }
+
+.dir { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+.dir.out { color: var(--crimson); }
+.dir.in  { color: var(--green); }
+
+tr.fresh td { background: var(--green-soft); transition: background 2s ease 1s; }
+
+/* ── Popup alertu ────────────────────────────────────── */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(27, 36, 48, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.overlay[hidden] {
+  display: none !important;
+}
+
+.alert-box {
+  background: #fff;
+  border-top: 6px solid var(--crimson);
+  border-radius: 6px;
+  max-width: 460px;
+  width: calc(100% - 40px);
+  padding: 22px 24px;
+  box-shadow: 0 18px 50px rgba(27, 36, 48, 0.35);
+}
+
+.alert-badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: #fff;
+  background: var(--crimson);
+  padding: 3px 9px;
+  border-radius: 3px;
+  margin-bottom: 10px;
+}
+
+.alert-box h2 { margin: 0 0 8px; font-size: 18px; }
+.alert-box p { margin: 0 0 12px; color: var(--ink-soft); font-size: 14px; }
+
+.alert-deadline {
+  font-family: var(--mono);
+  font-size: 14px;
+  background: var(--crimson-soft);
+  color: var(--crimson);
+  padding: 9px 12px;
+  border-radius: 4px;
+  margin-bottom: 14px;
+}
+
+.alert-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ── Toast ───────────────────────────────────────────── */
+
+.toast {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  font-size: 13.5px;
+  padding: 10px 18px;
+  border-radius: 4px;
+  z-index: 60;
+  max-width: 70%;
+}
+
+.toast.err { background: var(--crimson); }
+
+/* ── Responsywność ───────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; padding: 16px; }
+  .topbar { flex-direction: column; gap: 10px; align-items: flex-start; }
+  .strip-countdown { margin-left: 0; }
+  .payments { font-size: 12px; }
+}
+
+/* ── Panel operatora: zakładki, log zdarzeń ───────────── */
+
+.panel-link {
+  color: #9AA4B2;
+  font-size: 13px;
+  text-decoration: none;
+  border-bottom: 1px dotted #9AA4B2;
+}
+.panel-link:hover { color: #fff; border-color: #fff; }
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 28px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 12px 14px 10px;
+  cursor: pointer;
+}
+
+.tab:hover { color: var(--ink); }
+.tab.active { color: var(--ink); border-bottom-color: var(--crimson); }
+.tab:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+
+.badge {
+  display: inline-block;
+  min-width: 18px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--crimson);
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 6px;
+  margin-left: 4px;
+}
+
+.op-main { padding: 20px 28px 40px; max-width: 1320px; margin: 0 auto; }
+
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+.pane-title { font-size: 16px; font-weight: 600; margin: 26px 0 8px; }
+.tab-pane .pane-title:first-child { margin-top: 0; }
+
+.event-log {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px 14px;
+  max-height: 320px;
+  overflow-y: auto;
+  font-size: 13px;
+}
+
+.event-line {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.event-kind {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--crimson);
+  min-width: 96px;
+}
+
+.op-main .payments { background: var(--card); border: 1px solid var(--line); border-radius: 6px; }
+.op-main .payments th { padding: 10px 12px; }
+.op-main .payments td { padding: 8px 12px; }
+
+@media (max-width: 900px) {
+  .tabs { flex-wrap: wrap; padding: 0 12px; }
+  .op-main { padding: 14px 12px; }
+}
