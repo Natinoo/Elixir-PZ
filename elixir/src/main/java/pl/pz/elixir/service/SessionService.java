@@ -45,15 +45,18 @@ public class SessionService {
     private final BankLiquidityService bankLiquidityService;
     private final PaymentRepository paymentRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final SessionReportService sessionReportService;
 
     public SessionService(NettingService nettingService,
                           BankLiquidityService bankLiquidityService,
                           PaymentRepository paymentRepository,
-                          KafkaTemplate<String, String> kafkaTemplate) {
+                          KafkaTemplate<String, String> kafkaTemplate,
+                          SessionReportService sessionReportService) {
         this.nettingService = nettingService;
         this.bankLiquidityService = bankLiquidityService;
         this.paymentRepository = paymentRepository;
         this.kafkaTemplate = kafkaTemplate;
+        this.sessionReportService = sessionReportService;
     }
 
     @Transactional
@@ -91,10 +94,18 @@ public class SessionService {
         List<String> paymentIds = currentSession.stream().map(ElixirPaymentDto::getPaymentId).toList();
 
         if (!liquidityRequests.isEmpty()) {
+            boolean firstLiquidityFailureForSession = pendingLiquiditySessionId == null;
+
             markPayments(paymentIds, PaymentStatus.WAITING_FOR_LIQUIDITY, sessionId);
 
             if (pendingLiquiditySessionId == null) {
                 pendingLiquiditySessionId = sessionId;
+            }
+
+            blockBanksForUnresolvedLiquidity(sessionId, liquidityRequests);
+
+            if (firstLiquidityFailureForSession) {
+                saveSessionReport(sessionId, "WAITING_FOR_LIQUIDITY", transfers, liquidityRequests);
             }
 
             sendLiquidityRequestsIfNeeded(sessionId, liquidityRequests);
@@ -114,6 +125,7 @@ public class SessionService {
         }
 
         markPayments(paymentIds, PaymentStatus.PROCESSED, sessionId);
+        saveSessionReport(sessionId, "SETTLED_IN_ELIXIR", transfers, List.of());
         currentSession.clear();
         pendingLiquiditySessionId = null;
         pendingLiquidityRequestsByBank.clear();
@@ -370,6 +382,88 @@ public class SessionService {
             return true;
         }
         return bankId != null && !bankId.isBlank() && bankId.equals(request.getBankId());
+    }
+
+    private void blockBanksForUnresolvedLiquidity(String sessionId, List<LiquidityTransferRequestDto> liquidityRequests) {
+        Map<String, BigDecimal> requiredTopUpByBank = new LinkedHashMap<>();
+
+        for (LiquidityTransferRequestDto request : liquidityRequests) {
+            if (request.getBankId() == null || request.getBankId().isBlank()) {
+                continue;
+            }
+            BigDecimal amount = request.getAmount() == null ? BigDecimal.ZERO : request.getAmount();
+            requiredTopUpByBank.merge(request.getBankId(), amount, BigDecimal::add);
+        }
+
+        for (Map.Entry<String, BigDecimal> entry : requiredTopUpByBank.entrySet()) {
+            String bankId = entry.getKey();
+            BigDecimal requiredTopUp = entry.getValue();
+
+            if (!bankLiquidityService.isBlocked(SERVICE_CODE, bankId)) {
+                bankLiquidityService.blockBank(SERVICE_CODE, bankId);
+                log.warn(
+                        "Bank {} blocked in ELIXIR: session {} reached closing time without required liquidity. requiredTopUp={}",
+                        bankId,
+                        sessionId,
+                        requiredTopUp
+                );
+            } else {
+                log.info(
+                        "Bank {} remains blocked in ELIXIR while session {} waits for liquidity. requiredTopUp={}",
+                        bankId,
+                        sessionId,
+                        requiredTopUp
+                );
+            }
+        }
+    }
+
+    private void saveSessionReport(String sessionId,
+                                   String status,
+                                   List<NettingTransferDto> transfers,
+                                   List<LiquidityTransferRequestDto> liquidityRequests) {
+        List<String> reportLines = new ArrayList<>();
+        reportLines.add("Sesja " + sessionId + " status=" + status);
+
+        if (transfers == null || transfers.isEmpty()) {
+            reportLines.add("Brak transferów nettingowych w sesji.");
+        } else {
+            reportLines.add("Netting sesji:");
+            for (NettingTransferDto transfer : transfers) {
+                reportLines.add(
+                        transfer.getDebtorBankId() + " -> "
+                                + transfer.getCreditorBankId() + ": "
+                                + formatAmount(transfer.getAmount()) + " "
+                                + defaultText(transfer.getCurrency(), "PLN")
+                );
+            }
+        }
+
+        if (liquidityRequests != null && !liquidityRequests.isEmpty()) {
+            reportLines.add("Płynność / blokady:");
+            for (LiquidityTransferRequestDto request : liquidityRequests) {
+                reportLines.add(
+                        request.getBankId()
+                                + " wymaga zasilenia "
+                                + formatAmount(request.getAmount()) + " "
+                                + defaultText(request.getCurrency(), "PLN")
+                                + "; requestId=" + request.getRequestId()
+                                + "; bank zablokowany do czasu uzupełnienia płynności"
+                );
+            }
+        }
+
+        sessionReportService.saveReport(sessionId + " / " + status, reportLines);
+        log.info("ELIXIR session report saved: sessionId={}, status={}, lines={}",
+                sessionId, status, reportLines.size());
+    }
+
+    private String formatAmount(BigDecimal amount) {
+        return amount == null ? "0.00" : amount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private String defaultText(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     private void fillSettlementAccounts(List<NettingTransferDto> transfers) {

@@ -52,6 +52,11 @@ public class ElixirPaymentService {
 
         validatePayment(paymentDto);
 
+        // Tylko walidujemy, czy bank ma techniczne konto w ELIXIRZE.
+        // Nie nadpisujemy tutaj IBAN-u klienta technicznym rachunkiem banku.
+        bankLiquidityService.getAccountNumber(SERVICE_CODE, paymentDto.getSenderBankId());
+        bankLiquidityService.getAccountNumber(SERVICE_CODE, paymentDto.getReceiverBankId());
+
         paymentDto.ensureDefaults();
 
         Payment payment = new Payment(
@@ -61,6 +66,8 @@ public class ElixirPaymentService {
                 paymentDto.getReceiverBankId(),
                 paymentDto.getSenderAccount(),
                 paymentDto.getReceiverAccount(),
+                paymentDto.getSenderName(),
+                paymentDto.getReceiverName(),
                 paymentDto.getAmount(),
                 paymentDto.getCurrency(),
                 paymentDto.getTitle(),
@@ -139,6 +146,14 @@ public class ElixirPaymentService {
     }
 
     private void validatePayment(ElixirPaymentDto paymentDto) {
+        if (isBlank(paymentDto.getSenderName())) {
+            throw new IllegalArgumentException("Imię i nazwisko nadawcy jest wymagane.");
+        }
+
+        if (isBlank(paymentDto.getReceiverName())) {
+            throw new IllegalArgumentException("Imię i nazwisko odbiorcy jest wymagane.");
+        }
+
         if (isBlank(paymentDto.getSenderBankId())) {
             throw new IllegalArgumentException("Bank nadawcy jest wymagany.");
         }
@@ -157,6 +172,28 @@ public class ElixirPaymentService {
 
         if (paymentDto.getSenderBankId().equals(paymentDto.getReceiverBankId())) {
             throw new IllegalArgumentException("Bank nadawcy i odbiorcy nie mogą być takie same.");
+        }
+
+        if (bankLiquidityService.isBlocked(SERVICE_CODE, paymentDto.getSenderBankId())) {
+            throw new IllegalStateException("Bank nadawcy " + paymentDto.getSenderBankId()
+                    + " jest zablokowany w ELIXIR. Nie można wysłać przelewu z rachunku tego banku.");
+        }
+
+        if (bankLiquidityService.isBlocked(SERVICE_CODE, paymentDto.getReceiverBankId())) {
+            throw new IllegalStateException("Bank odbiorcy " + paymentDto.getReceiverBankId()
+                    + " jest zablokowany w ELIXIR. Nie można przyjąć przelewu na rachunek tego banku.");
+        }
+
+        if (isBlank(paymentDto.getSenderAccount())) {
+            throw new IllegalArgumentException("IBAN nadawcy jest wymagany.");
+        }
+
+        if (isBlank(paymentDto.getReceiverAccount())) {
+            throw new IllegalArgumentException("IBAN odbiorcy jest wymagany.");
+        }
+
+        if (paymentDto.getSenderAccount().equals(paymentDto.getReceiverAccount())) {
+            throw new IllegalArgumentException("IBAN nadawcy i odbiorcy nie mogą być takie same.");
         }
 
         if (paymentDto.getAmount() == null || paymentDto.getAmount().compareTo(BigDecimal.ZERO) <= 0) {

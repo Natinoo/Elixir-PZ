@@ -173,6 +173,7 @@
       <h2>⚙️ Akcje awaryjne</h2>
       <div class="topup-box">
         <input type="number" id="topupAmount" step="0.01" placeholder="Kwota top-up">
+        <button type="button" class="secondary" onclick="fillTopUpToRequiredLimit()">Uzupełnij do limitu</button>
         <button type="button" onclick="topUpSelectedBank()">Uzupełnij środki testowo</button>
         <button type="button" class="secondary" onclick="unblockSelectedBank()">Odblokuj bank</button>
       </div>
@@ -180,12 +181,24 @@
     </div>
 
     <div class="card">
-      <h2>📄 Raport końcowy banku (ostatnia sesja)</h2>
+      <div class="row-between">
+        <h2>📄 Raport końcowy banku (ostatnia sesja)</h2>
+        <div class="filters">
+          <button type="button" class="secondary" onclick="downloadBankReport('docx')">Pobierz DOCX</button>
+          <button type="button" class="secondary" onclick="downloadBankReport('pdf')">Pobierz PDF</button>
+        </div>
+      </div>
       <ul id="bank-report-list" class="report-list"><li>Ładowanie...</li></ul>
     </div>
 
     <div class="card">
-      <h2>📊 Ostatni raport sesji ELIXIR</h2>
+      <div class="row-between">
+        <h2>📊 Ostatni raport sesji ELIXIR</h2>
+        <div class="filters">
+          <button type="button" class="secondary" onclick="downloadLatestSessionReport('docx')">Pobierz DOCX</button>
+          <button type="button" class="secondary" onclick="downloadLatestSessionReport('pdf')">Pobierz PDF</button>
+        </div>
+      </div>
       <pre id="session-report-box">Ładowanie...</pre>
     </div>
   </section>
@@ -201,6 +214,7 @@
 
 <script>
   const API = "";
+  let latestExposureByBank = {};
 
   const EXAMPLES = {
     A_TO_B: {
@@ -624,6 +638,7 @@
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
+      latestExposureByBank[bank] = data;
 
       const balance = Number(data.balance ?? 0);
       const lowestAllowedBalance = Number(data.lowestAllowedBalance ?? 0);
@@ -652,49 +667,159 @@
   }
 
   async function loadBankReport(bank) {
-    const list = document.getElementById("bank-report-list");
-    const countSpan = document.getElementById("bank-report-count");
+  const list = document.getElementById("bank-report-list");
+
     try {
-      const { xml } = await fetchXml(`${API}/api/elixir/bank/${bank}/report`);
-      const data = parseStringListXml(xml);
+      const response = await fetch(`${API}/api/elixir/bank/${bank}/report`, {
+        headers: { "Accept": "application/json" }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
       if (!Array.isArray(data) || data.length === 0) {
         list.innerHTML = "<li>Brak raportu dla banku z ostatniej sesji.</li>";
         return;
       }
+
       list.innerHTML = data.map(line => `<li>${escapeHtml(line)}</li>`).join("");
     } catch (err) {
-      list.innerHTML = "<li>Błąd pobierania raportu banku.</li>";
+      list.innerHTML = `<li>Błąd pobierania raportu banku: ${escapeHtml(err.message)}</li>`;
     }
   }
 
   async function loadLatestSessionReport() {
     const box = document.getElementById("session-report-box");
     try {
-      const { text, xml } = await fetchXml(`${API}/api/elixir/session-report/latest`);
-      if (!text || text.trim() === "" || text.trim() === "null") {
+      const response = await fetch(`${API}/api/elixir/session-report/latest`, {
+        headers: { "Accept": "application/json, application/xml, text/xml, */*" }
+      });
+      const text = await response.text();
+
+      if (response.status === 204 || !text || text.trim() === "" || text.trim() === "null") {
         box.textContent = "Brak raportu z ostatniej sesji.";
         return;
       }
-      const data = parseSessionReportXml(xml);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const data = parseSessionReportResponse(text);
       if (!data) {
-        box.textContent = "Brak raportu z ostatniej sesji.";
+        box.textContent = `Nie udało się odczytać raportu.\n\nSurowa odpowiedź:\n${text}`;
         return;
       }
-      box.textContent = `Sesja: ${data.sessionName || "-"}\nZamknięta: ${formatDate(data.closedAt)}\n\n${data.nettingResult?.length ? data.nettingResult.join("\n") : "Brak pozycji w raporcie."}`;
+
+      const lines = Array.isArray(data.lines) ? data.lines : [];
+      box.textContent =
+        `Sesja: ${data.sessionName || "-"}\n` +
+        `Status: ${data.status || "-"}\n` +
+        `Zamknięta: ${formatDate(data.closedAt)}\n\n` +
+        `${lines.length ? lines.join("\n") : "Brak pozycji w raporcie."}`;
     } catch (err) {
-      box.textContent = "Brak raportu z ostatniej sesji.";
+      box.textContent = `Błąd pobierania raportu sesji: ${err.message}`;
     }
+  }
+
+  function parseSessionReportResponse(text) {
+    const trimmed = String(text || "").trim();
+
+    try {
+      const json = JSON.parse(trimmed);
+      const rawLines = json.nettingResult || json.lines || json.reportLines || json.entries || json.result || [];
+      return {
+        sessionName: json.sessionName || json.sessionId || json.name || "-",
+        status: json.status || json.sessionStatus || "-",
+        closedAt: json.closedAt || json.createdAt || json.finishedAt || null,
+        lines: normalizeReportLines(rawLines)
+      };
+    } catch (_) {
+      // nie JSON, próbujemy XML
+    }
+
+    const xml = parseXml(trimmed);
+    const root = xml.documentElement;
+    if (!root || root.tagName === "parsererror") return null;
+
+    const lines = [
+      ...Array.from(xml.getElementsByTagName("item")),
+      ...Array.from(xml.getElementsByTagName("line")),
+      ...Array.from(xml.getElementsByTagName("lines")),
+      ...Array.from(xml.getElementsByTagName("reportLine"))
+    ].map(x => x.textContent?.trim()).filter(Boolean);
+
+    return {
+      sessionName: getFirstTagText(xml, "sessionName") || getFirstTagText(xml, "sessionId") || getFirstTagText(xml, "name") || "-",
+      status: getFirstTagText(xml, "status") || getFirstTagText(xml, "sessionStatus") || "-",
+      closedAt: getFirstTagText(xml, "closedAt") || getFirstTagText(xml, "createdAt") || getFirstTagText(xml, "finishedAt") || null,
+      lines
+    };
+  }
+
+  function normalizeReportLines(value) {
+    if (!value) return [];
+    if (Array.isArray(value)) {
+      return value.map(item => {
+        if (typeof item === "string") return item;
+        if (item?.line) return item.line;
+        if (item?.description) return item.description;
+        if (item?.text) return item.text;
+        return JSON.stringify(item);
+      }).filter(Boolean);
+    }
+    if (typeof value === "string") {
+      return value.split("\n").map(x => x.trim()).filter(Boolean);
+    }
+    return [JSON.stringify(value)];
+  }
+
+  function downloadLatestSessionReport(format) {
+    const ext = format === "pdf" ? "pdf" : "docx";
+    window.location.href = `${API}/api/elixir/session-report/latest.${ext}`;
+  }
+
+  function downloadBankReport(format) {
+    const bank = document.getElementById("selectedBank").value;
+    const ext = format === "pdf" ? "pdf" : "docx";
+    window.location.href = `${API}/api/elixir/bank/${encodeURIComponent(bank)}/report.${ext}`;
+  }
+
+  function fillTopUpToRequiredLimit() {
+    const bank = document.getElementById("selectedBank").value;
+    const exposure = latestExposureByBank[bank] || {};
+    const requiredTopUp = Number(exposure.requiredTopUp ?? 0);
+    const message = document.getElementById("topup-message");
+    message.className = "message";
+
+    if (!requiredTopUp || requiredTopUp <= 0) {
+      message.classList.add("error");
+      message.textContent = "Ten bank nie wymaga aktualnie zasilenia do dolnego limitu zadłużenia.";
+      return;
+    }
+
+    document.getElementById("topupAmount").value = requiredTopUp.toFixed(2);
+    message.textContent = `Wstawiono wymaganą kwotę zasilenia do limitu: ${formatMoney(requiredTopUp, "PLN")}.`;
   }
 
   async function topUpSelectedBank() {
     const bank = document.getElementById("selectedBank").value;
     const amount = document.getElementById("topupAmount").value;
+    const amountNumber = Number(amount);
+    const exposure = latestExposureByBank[bank] || {};
+    const requiredTopUp = Number(exposure.requiredTopUp ?? 0);
     const message = document.getElementById("topup-message");
     message.className = "message";
 
-    if (!amount || Number(amount) <= 0) {
+    if (!amount || amountNumber <= 0) {
       message.classList.add("error");
       message.textContent = "Podaj poprawną kwotę top-up.";
+      return;
+    }
+
+    if (requiredTopUp > 0 && amountNumber > requiredTopUp) {
+      message.classList.add("error");
+      message.textContent = `Kwota przekracza wymagane zasilenie do dolnego limitu zadłużenia. Maksymalnie: ${formatMoney(requiredTopUp, "PLN")}.`;
       return;
     }
 
@@ -770,4 +895,3 @@
 </script>
 </body>
 </html>
-
