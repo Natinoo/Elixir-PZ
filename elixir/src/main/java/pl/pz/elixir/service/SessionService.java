@@ -21,6 +21,7 @@ import javax.xml.transform.stream.StreamSource;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -34,10 +35,11 @@ public class SessionService {
     private static final Logger log = LoggerFactory.getLogger(SessionService.class);
     private static final String SERVICE_CODE = BankLiquidityService.ELIXIR;
     private static final List<String> BANKS = List.of("BANK_A", "BANK_B", "BANK_C");
+    private static final Duration LIQUIDITY_REQUEST_RESEND_INTERVAL = Duration.ofSeconds(10);
 
     private final List<ElixirPaymentDto> currentSession = new ArrayList<>();
     private String pendingLiquiditySessionId;
-    private List<LiquidityTransferRequestDto> pendingLiquidityRequests = new ArrayList<>();
+    private final Map<String, PendingLiquidityRequest> pendingLiquidityRequestsByBank = new LinkedHashMap<>();
 
     private final NettingService nettingService;
     private final BankLiquidityService bankLiquidityService;
@@ -74,7 +76,7 @@ public class SessionService {
     public synchronized SessionCloseResult closeSession() {
         if (currentSession.isEmpty()) {
             pendingLiquiditySessionId = null;
-            pendingLiquidityRequests = new ArrayList<>();
+            pendingLiquidityRequestsByBank.clear();
             return new SessionCloseResult(null, "EMPTY_SESSION", List.of(), List.of());
         }
 
@@ -93,15 +95,9 @@ public class SessionService {
 
             if (pendingLiquiditySessionId == null) {
                 pendingLiquiditySessionId = sessionId;
-                pendingLiquidityRequests = List.copyOf(liquidityRequests);
-                for (LiquidityTransferRequestDto request : liquidityRequests) {
-                    kafkaTemplate.send("liquidity.requests.sorbnet", request.getRequestId(), toXml(request));
-                    log.warn("Liquidity request sent to Sorbnet: requestId={}, bank={}, amount={}",
-                            request.getRequestId(), request.getBankId(), request.getAmount());
-                }
-            } else {
-                log.info("Session {} is still waiting for liquidity. Requests are not sent again.", sessionId);
             }
+
+            sendLiquidityRequestsIfNeeded(sessionId, liquidityRequests);
 
             return new SessionCloseResult(sessionId, "WAITING_FOR_LIQUIDITY", transfers, liquidityRequests);
         }
@@ -120,7 +116,7 @@ public class SessionService {
         markPayments(paymentIds, PaymentStatus.PROCESSED, sessionId);
         currentSession.clear();
         pendingLiquiditySessionId = null;
-        pendingLiquidityRequests = new ArrayList<>();
+        pendingLiquidityRequestsByBank.clear();
         return new SessionCloseResult(sessionId, "SETTLED_IN_ELIXIR", transfers, List.of());
     }
 
@@ -195,16 +191,43 @@ public class SessionService {
     }
 
     private List<LiquidityTransferRequestDto> buildLiquidityRequests(String sessionId, List<NettingTransferDto> transfers) {
-        List<LiquidityTransferRequestDto> liquidityRequests = new ArrayList<>();
+        Map<String, BigDecimal> totalDebitByBank = new LinkedHashMap<>();
+        Map<String, String> currencyByBank = new LinkedHashMap<>();
 
         for (NettingTransferDto transfer : transfers) {
-            if (!bankLiquidityService.hasAvailableLiquidity(SERVICE_CODE, transfer.getDebtorBankId(), transfer.getAmount())) {
+            if (transfer.getDebtorBankId() == null || transfer.getDebtorBankId().isBlank()) {
+                continue;
+            }
+
+            BigDecimal amount = transfer.getAmount() == null ? BigDecimal.ZERO : transfer.getAmount();
+            if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+
+            String bankId = transfer.getDebtorBankId();
+            totalDebitByBank.merge(bankId, amount, BigDecimal::add);
+            currencyByBank.putIfAbsent(bankId, transfer.getCurrency() == null ? "PLN" : transfer.getCurrency());
+        }
+
+        List<LiquidityTransferRequestDto> liquidityRequests = new ArrayList<>();
+        for (Map.Entry<String, BigDecimal> entry : totalDebitByBank.entrySet()) {
+            String bankId = entry.getKey();
+            BigDecimal totalDebit = entry.getValue();
+
+            if (!bankLiquidityService.hasAvailableLiquidity(SERVICE_CODE, bankId, totalDebit)) {
                 BigDecimal requiredTopUp = bankLiquidityService.calculateRequiredTopUp(
                         SERVICE_CODE,
-                        transfer.getDebtorBankId(),
-                        transfer.getAmount()
+                        bankId,
+                        totalDebit
                 );
-                liquidityRequests.add(buildLiquidityRequest(sessionId, transfer, requiredTopUp));
+
+                liquidityRequests.add(buildLiquidityRequest(
+                        sessionId,
+                        bankId,
+                        totalDebit,
+                        currencyByBank.getOrDefault(bankId, "PLN"),
+                        requiredTopUp
+                ));
             }
         }
 
@@ -212,10 +235,11 @@ public class SessionService {
     }
 
     private LiquidityTransferRequestDto buildLiquidityRequest(String sessionId,
-                                                              NettingTransferDto transfer,
+                                                              String bankId,
+                                                              BigDecimal totalDebit,
+                                                              String currency,
                                                               BigDecimal requiredTopUp) {
-        String requestId = "LIQ-" + sessionId + "-" + transfer.getDebtorBankId();
-        String bankId = transfer.getDebtorBankId();
+        String requestId = buildShortLiquidityRequestId(sessionId, bankId);
         String sourceAccount = bankLiquidityService.getAccountNumber(BankLiquidityService.SORBNET, bankId);
         String targetAccount = bankLiquidityService.getAccountNumber(BankLiquidityService.ELIXIR, bankId);
         boolean sourceHasFunds = bankLiquidityService.sorbnetCanFund(bankId, requiredTopUp);
@@ -229,10 +253,123 @@ public class SessionService {
                 sourceAccount,
                 targetAccount,
                 requiredTopUp,
-                transfer.getCurrency(),
-                "Brak płynności w ELIXIR przed lokalnym rozliczeniem sesji nettingowej",
+                currency,
+                "Brak płynności w ELIXIR przed lokalnym rozliczeniem sesji nettingowej. "
+                        + "Łączne zobowiązanie banku w sesji: " + totalDebit,
                 sourceHasFunds
         );
+    }
+
+    private String buildShortLiquidityRequestId(String sessionId, String bankId) {
+        String safeBankId = bankId == null || bankId.isBlank() ? "BANK" : bankId.replaceAll("[^A-Za-z0-9_]", "_");
+        String sessionPart = sessionId == null || sessionId.isBlank() ? UUID.randomUUID().toString() : sessionId;
+
+        int lastDash = sessionPart.lastIndexOf('-');
+        if (lastDash >= 0 && lastDash < sessionPart.length() - 1) {
+            sessionPart = sessionPart.substring(lastDash + 1);
+        }
+        if (sessionPart.length() > 12) {
+            sessionPart = sessionPart.substring(sessionPart.length() - 12);
+        }
+
+        String randomPart = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        return "LIQ-" + safeBankId + "-" + sessionPart + "-" + randomPart;
+    }
+
+    private void sendLiquidityRequestsIfNeeded(String sessionId, List<LiquidityTransferRequestDto> liquidityRequests) {
+        LocalDateTime now = LocalDateTime.now();
+        List<String> banksStillRequiringLiquidity = liquidityRequests.stream()
+                .map(LiquidityTransferRequestDto::getBankId)
+                .filter(bankId -> bankId != null && !bankId.isBlank())
+                .distinct()
+                .toList();
+
+        pendingLiquidityRequestsByBank.entrySet().removeIf(entry -> !banksStillRequiringLiquidity.contains(entry.getKey()));
+
+        for (LiquidityTransferRequestDto request : liquidityRequests) {
+            String bankId = request.getBankId();
+            if (bankId == null || bankId.isBlank()) {
+                log.warn("Liquidity request skipped: missing bankId. sessionId={}, requestId={}",
+                        sessionId, request.getRequestId());
+                continue;
+            }
+
+            PendingLiquidityRequest pending = pendingLiquidityRequestsByBank.get(bankId);
+            if (pending == null) {
+                PendingLiquidityRequest newPending = new PendingLiquidityRequest(request);
+                pendingLiquidityRequestsByBank.put(bankId, newPending);
+                sendLiquidityRequest(sessionId, newPending, "new request");
+                continue;
+            }
+
+            boolean amountChanged = compareAmount(pending.request.getAmount(), request.getAmount()) != 0;
+            if (amountChanged) {
+                PendingLiquidityRequest replacement = new PendingLiquidityRequest(request);
+                pendingLiquidityRequestsByBank.put(bankId, replacement);
+                sendLiquidityRequest(sessionId, replacement, "required amount changed");
+                continue;
+            }
+
+            boolean resendDue = pending.lastSentAt == null
+                    || Duration.between(pending.lastSentAt, now).compareTo(LIQUIDITY_REQUEST_RESEND_INTERVAL) >= 0;
+            if (resendDue) {
+                sendLiquidityRequest(sessionId, pending, "pending request resend");
+            } else {
+                log.info(
+                        "Session {} is still waiting for liquidity from bank {}. Request is pending; resend not due yet. requestId={}, amount={}, sentCount={}",
+                        sessionId,
+                        bankId,
+                        pending.request.getRequestId(),
+                        pending.request.getAmount(),
+                        pending.sendCount
+                );
+            }
+        }
+    }
+
+    private void sendLiquidityRequest(String sessionId, PendingLiquidityRequest pending, String reason) {
+        kafkaTemplate.send("liquidity.requests.sorbnet", pending.request.getRequestId(), toXml(pending.request));
+        pending.lastSentAt = LocalDateTime.now();
+        pending.sendCount++;
+        log.warn("Liquidity request sent to Sorbnet: sessionId={}, requestId={}, bank={}, amount={}, reason={}, sentCount={}",
+                sessionId,
+                pending.request.getRequestId(),
+                pending.request.getBankId(),
+                pending.request.getAmount(),
+                reason,
+                pending.sendCount);
+    }
+
+    private int compareAmount(BigDecimal left, BigDecimal right) {
+        BigDecimal safeLeft = left == null ? BigDecimal.ZERO : left;
+        BigDecimal safeRight = right == null ? BigDecimal.ZERO : right;
+        return safeLeft.compareTo(safeRight);
+    }
+
+    public synchronized void markLiquidityRequestCompleted(String requestId, String bankId) {
+        if (pendingLiquidityRequestsByBank.isEmpty()) {
+            return;
+        }
+
+        List<String> banksToRemove = pendingLiquidityRequestsByBank.entrySet().stream()
+                .filter(entry -> matchesCompletedLiquidityRequest(entry.getValue().request, requestId, bankId))
+                .map(Map.Entry::getKey)
+                .toList();
+
+        for (String bankToRemove : banksToRemove) {
+            PendingLiquidityRequest removed = pendingLiquidityRequestsByBank.remove(bankToRemove);
+            if (removed != null) {
+                log.info("Liquidity request completed in ELIXIR session: requestId={}, bank={}",
+                        removed.request.getRequestId(), removed.request.getBankId());
+            }
+        }
+    }
+
+    private boolean matchesCompletedLiquidityRequest(LiquidityTransferRequestDto request, String requestId, String bankId) {
+        if (requestId != null && !requestId.isBlank() && requestId.equals(request.getRequestId())) {
+            return true;
+        }
+        return bankId != null && !bankId.isBlank() && bankId.equals(request.getBankId());
     }
 
     private void fillSettlementAccounts(List<NettingTransferDto> transfers) {
@@ -274,6 +411,16 @@ public class SessionService {
             return sw.toString();
         } catch (Exception e) {
             throw new IllegalStateException("Nie można zapisać ISO 20022 XML: " + e.getMessage(), e);
+        }
+    }
+
+    private static class PendingLiquidityRequest {
+        private final LiquidityTransferRequestDto request;
+        private LocalDateTime lastSentAt;
+        private int sendCount;
+
+        private PendingLiquidityRequest(LiquidityTransferRequestDto request) {
+            this.request = request;
         }
     }
 

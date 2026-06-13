@@ -171,9 +171,6 @@
 
     <div class="card">
       <h2>⚙️ Akcje awaryjne</h2>
-      <p class="hint">
-        Lokalny top-up zostawiam jako akcję testową. Docelowo przy braku płynności Elixir powinien wysłać request do Sorbnetu, a bank zatwierdza zasilenie w GUI Sorbnetu.
-      </p>
       <div class="topup-box">
         <input type="number" id="topupAmount" step="0.01" placeholder="Kwota top-up">
         <button type="button" onclick="topUpSelectedBank()">Uzupełnij środki testowo</button>
@@ -204,7 +201,6 @@
 
 <script>
   const API = "";
-  const BANK_LIMITS = { BANK_A: -1000, BANK_B: -1000, BANK_C: -1000 };
 
   const EXAMPLES = {
     A_TO_B: {
@@ -591,17 +587,17 @@
 
   async function refreshWorkerView() {
     const bank = document.getElementById("selectedBank").value;
-    const limit = BANK_LIMITS[bank] ?? -1000;
-    document.getElementById("limit-value").textContent = formatMoney(limit, "PLN");
+
     await Promise.all([
-      loadLiquidity(bank, limit),
-      loadCurrentExposure(bank),
+      loadLiquidity(bank),
       loadBankReport(bank),
       loadLatestSessionReport()
     ]);
+
+    await loadCurrentExposure(bank);
   }
 
-  async function loadLiquidity(bank, limit) {
+  async function loadLiquidity(bank) {
     try {
       const [liquidityData, blockedData] = await Promise.all([
         fetchJsonOrXmlMap(`${API}/api/elixir/liquidity`),
@@ -612,16 +608,6 @@
       const isBlocked = Boolean(blockedData[bank]);
       document.getElementById("balance-value").textContent = formatMoney(balance, "PLN");
       document.getElementById("blocked-value").textContent = isBlocked ? "ZABLOKOWANY" : "AKTYWNY";
-
-      const alertBox = document.getElementById("bank-alert");
-      if (balance < limit || isBlocked) {
-        alertBox.classList.remove("hidden");
-        alertBox.innerHTML = `<strong>Uwaga:</strong> Bank ${escapeHtml(bank)} przekroczył limit zadłużenia albo został zablokowany. Przy zamykaniu sesji Elixir powinien poprosić Sorbnet o zasilenie konta technicznego.`;
-        openPopup(bank, balance, limit, isBlocked);
-      } else {
-        alertBox.classList.add("hidden");
-        closePopup();
-      }
     } catch (err) {
       document.getElementById("balance-value").textContent = "Błąd";
       document.getElementById("blocked-value").textContent = "Błąd";
@@ -639,19 +625,29 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
 
+      const balance = Number(data.balance ?? 0);
+      const lowestAllowedBalance = Number(data.lowestAllowedBalance ?? 0);
       const obligation = Number(data.currentObligation ?? 0);
       const projected = Number(data.projectedBalanceAfterObligation ?? 0);
       const requiredTopUp = Number(data.requiredTopUp ?? 0);
       const liquidityRisk = Boolean(data.liquidityRisk);
+      const isBlocked = Boolean(data.blocked);
 
+      document.getElementById("balance-value").textContent = formatMoney(balance, "PLN");
+      document.getElementById("limit-value").textContent = formatMoney(lowestAllowedBalance, "PLN");
+      document.getElementById("blocked-value").textContent = isBlocked ? "ZABLOKOWANY" : "AKTYWNY";
       countSpan.textContent = `${formatMoney(obligation, "PLN")} / po sesji: ${formatMoney(projected, "PLN")}`;
 
       if (liquidityRisk) {
         alertBox.classList.remove("hidden");
         alertBox.innerHTML = `<strong>Alert płynności:</strong> Bank ${escapeHtml(bank)} przekracza limit w bieżącej sesji. Wymagane zasilenie: ${formatMoney(requiredTopUp, "PLN")}.`;
-        openPopup(bank, projected, Number(data.lowestAllowedBalance ?? 0), Boolean(data.blocked));
+        openPopup(bank, projected, lowestAllowedBalance, isBlocked, requiredTopUp);
+      } else {
+        alertBox.classList.add("hidden");
+        closePopup();
       }
     } catch (err) {
+      countSpan.textContent = "Błąd";
     }
   }
 
@@ -739,10 +735,10 @@
     }
   }
 
-  function openPopup(bank, balance, limit, isBlocked) {
+  function openPopup(bank, projectedBalance, limit, isBlocked, requiredTopUp = 0) {
     const popup = document.getElementById("popup-overlay");
     const popupText = document.getElementById("popup-text");
-    popupText.textContent = `Bank ${bank} przekroczył limit zadłużenia albo został zablokowany. Saldo techniczne ELIXIR: ${formatMoney(balance, "PLN")}, limit: ${formatMoney(limit, "PLN")}. ${isBlocked ? "Bank jest obecnie zablokowany." : "Przy zamknięciu sesji może być wymagane zasilenie z Sorbnetu."}`;
+    popupText.textContent = `Bank ${bank} przekroczył limit zadłużenia albo został zablokowany. Saldo techniczne ELIXIR po sesji: ${formatMoney(projectedBalance, "PLN")}, limit: ${formatMoney(limit, "PLN")}. Wymagane zasilenie: ${formatMoney(requiredTopUp, "PLN")}. ${isBlocked ? "Bank jest obecnie zablokowany." : "Przy zamknięciu sesji może być wymagane zasilenie z Sorbnetu."}`;
     popup.classList.remove("hidden");
   }
 

@@ -92,6 +92,25 @@ public class BankLiquidityService {
                 serviceCode, senderId, receiverId, amount, sender.getBalance(), receiver.getBalance());
     }
 
+
+    @Transactional
+    public void applyConfirmedLiquidityTransfer(String sourceServiceCode,
+                                                String targetServiceCode,
+                                                String bankId,
+                                                BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Kwota potwierdzonego transferu płynności musi być większa od zera.");
+        }
+
+        BankAccount target = getAccount(targetServiceCode, bankId);
+        target.setBalance(target.getBalance().add(amount));
+        refreshLimitMarkers(target);
+        bankAccountRepository.save(target);
+
+        log.info("Confirmed external liquidity transfer for bank {}: {} -> {}, amount={}, targetBalance={}",
+                bankId, sourceServiceCode, targetServiceCode, amount, target.getBalance());
+    }
+
     @Transactional
     public void transferBetweenServices(String sourceServiceCode, String targetServiceCode, String bankId, BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
