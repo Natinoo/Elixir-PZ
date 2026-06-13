@@ -1,6 +1,6 @@
 /* SORBNET — panel operatora systemu. */
 
-const WS_ENDPOINT = "/ws"; // TODO: jak w app.js — dopasuj do WebSocketConfig
+const WS_ENDPOINT = "/ws"; 
 const $ = (id) => document.getElementById(id);
 const fmtPLN = new Intl.NumberFormat("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 

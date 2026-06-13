@@ -3,7 +3,6 @@ package pl.pz.sorbnet.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.jpa.repository.Query;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -26,6 +25,9 @@ public class GridlockResolutionService {
 
     @Value("${sorbnet.overlimit.block-after-hours:2}")
     private int blockAfterHours;
+
+    @Value("${sorbnet.overlimit.block-after-minutes:0}")
+    private long blockAfterMinutes;
 
     public GridlockResolutionService(PaymentRepository paymentRepo,
                                      BankAccountRepository accountRepo,
@@ -61,26 +63,34 @@ public class GridlockResolutionService {
                             .orElse(null);
                     if (receiver == null) continue;
 
-                    sender.setBalance(newBalance);
-                    receiver.setBalance(receiver.getBalance().add(p.getAmount()));
-                    sender.setOverlimitSince(null);
-                    accountRepo.saveAll(List.of(sender, receiver));
+                        sender.setBalance(newBalance);
 
-                    p.setStatus(PaymentStatus.SETTLED);
-                    p.setSettledAt(LocalDateTime.now());
-                    paymentRepo.save(p);
+                        receiver.setBalance(receiver.getBalance().add(p.getAmount()));
 
-                    log.info("Gridlock rozwiązany dla przelewu {}", p.getPaymentId());
-                    progress = true;
+                        p.setStatus(PaymentStatus.SETTLED);
+                        p.setSettledAt(LocalDateTime.now());
+                        paymentRepo.save(p);
+
+                        // flagę zdejmujemy dopiero, gdy bank nie ma już ŻADNEGO wstrzymanego przelewu
+                        boolean stillHeld = paymentRepo
+                                .findBySenderBankIdAndStatus(sender.getBankId(), PaymentStatus.GRIDLOCK_HELD)
+                                .stream()
+                                .anyMatch(h -> !h.getPaymentId().equals(p.getPaymentId()));
+                        if (!stillHeld) {
+                        sender.setOverlimitSince(null);
+                        }
+                        accountRepo.saveAll(List.of(sender, receiver));
                 }
             }
         }
     }
 
-    @Scheduled(fixedDelay = 60_000)
+    @Scheduled(fixedDelayString = "${sorbnet.overlimit.check-interval-ms:60000}")
     @Transactional
     public void autoBlock() {
-        LocalDateTime cutoff = LocalDateTime.now().minusHours(blockAfterHours);
+         LocalDateTime cutoff = blockAfterMinutes > 0 
+                ? LocalDateTime.now().minusMinutes(blockAfterMinutes)
+                : LocalDateTime.now().minusHours(blockAfterHours);
         accountRepo.findOverLimit().stream()
                 .filter(b -> !b.isBlocked())
                 .filter(b -> b.getOverlimitSince() != null && b.getOverlimitSince().isBefore(cutoff))
