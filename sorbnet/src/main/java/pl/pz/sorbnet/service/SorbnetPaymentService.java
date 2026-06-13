@@ -3,6 +3,7 @@ package pl.pz.sorbnet.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,12 @@ public class SorbnetPaymentService {
 
     private static final Logger log = LoggerFactory.getLogger(SorbnetPaymentService.class);
     private static final String SERVICE = "SORBNET";
+
+    @Value("${sorbnet.overlimit.block-after-hours:2}")
+    private int blockAfterHours;
+
+    @Value("${sorbnet.overlimit.block-after-minutes:0}")
+    private long blockAfterMinutes;
 
     private final BankAccountRepository accountRepo;
     private final PaymentRepository paymentRepo;
@@ -43,6 +50,10 @@ public class SorbnetPaymentService {
 
     public Map<String, Object> process(SorbnetPaymentDto dto) {
         if (dto.getPaymentId() == null) dto.setPaymentId(UUID.randomUUID().toString());
+
+        if (dto.getAmount() == null || dto.getAmount().signum() <= 0) {
+            return reject(dto, "INVALID_AMOUNT");
+        }
 
         dto.setSenderBankId(normalizeBankId(dto.getSenderBankId()));
         dto.setReceiverBankId(normalizeBankId(dto.getReceiverBankId()));
@@ -189,14 +200,40 @@ public class SorbnetPaymentService {
     }
 
     public Map<String, Object> getAccountStatus(String bankId) {
-        BankAccount bank = accountRepo.findByServiceCodeAndBankId(SERVICE, normalizeBankId(bankId))
-            .orElseThrow(() -> new RuntimeException("Nieznany bank: " + bankId));
+    BankAccount bank = accountRepo.findByServiceCodeAndBankId(SERVICE, normalizeBankId(bankId))
+        .orElseThrow(() -> new RuntimeException("Nieznany bank: " + bankId));
 
-        BigDecimal available = bank.getBalance().add(bank.getDebtLimit());
-        BigDecimal minDeposit = BigDecimal.ZERO;
+    BigDecimal available = bank.getBalance().add(bank.getDebtLimit());
 
-        if (bank.getBalance().compareTo(bank.getDebtLimit().negate()) < 0) {
-            minDeposit = bank.getBalance().negate().subtract(bank.getDebtLimit());
+    // Suma przelewów banku wstrzymanych w gridlocku (nie zaksięgowanych).
+    // To one czekają na płynność — od nich liczymy brakującą kwotę.
+    BigDecimal heldOutgoing = paymentRepo
+            .findBySenderBankIdAndStatus(bank.getBankId(), PaymentStatus.GRIDLOCK_HELD)
+            .stream()
+            .map(Payment::getAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+    // Ile trzeba dopłacić, żeby wstrzymane przelewy zmieściły się w limicie:
+    // potrzeba (held - dostępne); jeśli dostępne >= held, nic nie brakuje.
+    BigDecimal minDeposit = BigDecimal.ZERO;
+    if (heldOutgoing.signum() > 0) {
+        BigDecimal shortfall = heldOutgoing.subtract(available);
+        if (shortfall.signum() > 0) {
+            minDeposit = shortfall;
+        }
+    } else if (bank.getBalance().compareTo(bank.getDebtLimit().negate()) < 0) {
+        // awaryjnie: realne zejście salda poniżej -limit (np. po nettingu z ELIXIR-a)
+        minDeposit = bank.getBalance().negate().subtract(bank.getDebtLimit());
+    }
+
+   boolean overLimit = bank.getOverlimitSince() != null;
+
+        String blockedBy = null;
+        if (overLimit) {
+            blockedBy = (blockAfterMinutes > 0
+                    ? bank.getOverlimitSince().plusMinutes(blockAfterMinutes)
+                    : bank.getOverlimitSince().plusHours(blockAfterHours)
+            ).toString();
         }
 
         Map<String, Object> result = new HashMap<>();
@@ -206,12 +243,14 @@ public class SorbnetPaymentService {
         result.put("balance", bank.getBalance());
         result.put("debtLimit", bank.getDebtLimit());
         result.put("availableCredit", available);
+        result.put("heldAmount", heldOutgoing);
         result.put("minDepositToRestore", minDeposit);
         result.put("blocked", bank.isBlocked());
-        result.put("overlimitSince", bank.getOverlimitSince() != null
-                ? bank.getOverlimitSince().toString() : null);
+        result.put("overlimit", overLimit);
+        result.put("overlimitSince", overLimit ? bank.getOverlimitSince().toString() : null);
+        result.put("blockedIfNotResolvedBy", blockedBy);
         return result;
-    }
+}
 
     // ===== prywatne =====
 
@@ -221,49 +260,49 @@ public class SorbnetPaymentService {
     }
 
     private Map<String, Object> holdGridlock(SorbnetPaymentDto dto, BankAccount sender) {
-        if (sender.getOverlimitSince() == null) {
-            sender.setOverlimitSince(LocalDateTime.now());
-            accountRepo.save(sender);
-        }
-
-        Payment payment = buildPayment(dto, PaymentStatus.GRIDLOCK_HELD);
-        paymentRepo.save(payment);
-
-        notify("events.gridlock", sender.getBankId(), Map.of(
-            "bankId", sender.getBankId(),
-            "paymentId", payment.getPaymentId(),
-            "balance", sender.getBalance(),
-            "debtLimit", sender.getDebtLimit(),
-            "timestamp", LocalDateTime.now().toString()
-        ));
-        notify("events.emergency", sender.getBankId(), Map.of(
-            "type", "DEBT_LIMIT_EXCEEDED",
-            "bankId", sender.getBankId(),
-            "balance", sender.getBalance(),
-            "debtLimit", sender.getDebtLimit()
-        ));
-
-        ws.convertAndSend("/topic/alerts/" + sender.getBankId(), Map.of(
-            "alert", true,
-            "type", "DEBT_LIMIT_EXCEEDED",
-            "message", "Przekroczono limit zadłużenia. Należy niezwłocznie uzupełnić środki.",
-            "balance", sender.getBalance(),
-            "debtLimit", sender.getDebtLimit(),
-            "overlimitSince", sender.getOverlimitSince().toString(),
-            "blockedIfNotResolvedBy", sender.getOverlimitSince().plusHours(2).toString()
-        ));
-
-        return Map.of(
-            "paymentId", payment.getPaymentId(),
-            "status", "GRIDLOCK_HELD",
-            "message", "Payment held in gridlock queue",
-            "senderBankId", payment.getSenderBankId(),
-            "receiverBankId", payment.getReceiverBankId(),
-            "senderAccount", payment.getSenderAccount(),
-            "receiverAccount", payment.getReceiverAccount(),
-            "amount", payment.getAmount()
-        );
+    // przelew BY przekroczył limit -> NIE księgujemy (saldo nietknięte),
+    // ale wstrzymanie uruchamia stan alarmowy i licznik do automatycznej blokady.
+    // Bank ma czas (block-after-minutes/hours) na uzupełnienie środków skądkolwiek,
+    // inaczej autoBlock go zablokuje.
+    if (sender.getOverlimitSince() == null) {
+        sender.setOverlimitSince(LocalDateTime.now());
+        accountRepo.save(sender);
     }
+
+    Payment payment = buildPayment(dto, PaymentStatus.GRIDLOCK_HELD);
+    paymentRepo.save(payment);
+
+    notify("events.gridlock", sender.getBankId(), Map.of(
+        "bankId", sender.getBankId(),
+        "paymentId", payment.getPaymentId(),
+        "balance", sender.getBalance(),
+        "debtLimit", sender.getDebtLimit(),
+        "amount", payment.getAmount(),
+        "timestamp", LocalDateTime.now().toString()
+    ));
+
+    ws.convertAndSend("/topic/alerts/" + sender.getBankId(), Map.of(
+        "alert", true,
+        "type", "DEBT_LIMIT_EXCEEDED",
+        "message", "Przelew wstrzymany — przekroczyłby limit zadłużenia. "
+                + "Uzupełnij środki, aby go rozliczyć i uniknąć blokady.",
+        "balance", sender.getBalance(),
+        "debtLimit", sender.getDebtLimit(),
+        "amount", payment.getAmount(),
+        "overlimitSince", sender.getOverlimitSince().toString()
+    ));
+
+    return Map.of(
+        "paymentId", payment.getPaymentId(),
+        "status", "GRIDLOCK_HELD",
+        "message", "Payment held in gridlock queue",
+        "senderBankId", payment.getSenderBankId(),
+        "receiverBankId", payment.getReceiverBankId(),
+        "senderAccount", payment.getSenderAccount(),
+        "receiverAccount", payment.getReceiverAccount(),
+        "amount", payment.getAmount()
+    );
+}
 
     private Map<String, Object> reject(SorbnetPaymentDto dto, String reason) {
         Payment payment = buildPayment(dto, PaymentStatus.REJECTED);
@@ -326,4 +365,5 @@ public class SorbnetPaymentService {
         try { kafka.send(topic, key, mapper.writeValueAsString(payload)); }
         catch (Exception e) { log.error("Kafka error: {}", e.getMessage()); }
     }
+    
 }

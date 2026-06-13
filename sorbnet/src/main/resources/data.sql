@@ -18,13 +18,9 @@ CREATE TABLE IF NOT EXISTS bank_accounts (
 
 INSERT INTO bank_accounts (service_code, bank_id, bank_name, account_number, balance, debt_limit, blocked, overlimit_since, blocked_at)
 VALUES
-    ('SORBNET', 'BANK_A', 'Bank A - Sorbnet', 'SORBNET-A-00000000000000000001', 10000000.00, 0.00, false, NULL, NULL),
-    ('SORBNET', 'BANK_B', 'Bank B - Sorbnet', 'SORBNET-B-00000000000000000002', 10000000.00, 0.00, false, NULL, NULL),
-    ('SORBNET', 'BANK_C', 'Bank C - Sorbnet', 'SORBNET-C-00000000000000000003', 10000000.00, 0.00, false, NULL, NULL),
-    -- lustro kont ELIXIR po stronie SORBNET (do sprawdzania stanu przez ELIXIR)
-    ('ELIXIR',  'BANK_A', 'Bank A - Elixir',  'ELIXIR-A-00000000000000000001',  5000000.00, 2000000.00, false, NULL, NULL),
-    ('ELIXIR',  'BANK_B', 'Bank B - Elixir',  'ELIXIR-B-00000000000000000002',  5000000.00, 2000000.00, false, NULL, NULL),
-    ('ELIXIR',  'BANK_C', 'Bank C - Elixir',  'ELIXIR-C-00000000000000000003',  5000000.00, 2000000.00, false, NULL, NULL)
+    ('SORBNET', 'BANK_A', 'Bank A - Sorbnet', 'SORBNET-A-00000000000000000001', 10000000.00, 30000000.00, false, NULL, NULL),
+    ('SORBNET', 'BANK_B', 'Bank B - Sorbnet', 'SORBNET-B-00000000000000000002', 10000000.00, 30000000.00, false, NULL, NULL),
+    ('SORBNET', 'BANK_C', 'Bank C - Sorbnet', 'SORBNET-C-00000000000000000003', 10000000.00, 30000000.00, false, NULL, NULL)
 ON CONFLICT (service_code, bank_id) DO UPDATE SET
     bank_name      = EXCLUDED.bank_name,
     account_number = EXCLUDED.account_number,

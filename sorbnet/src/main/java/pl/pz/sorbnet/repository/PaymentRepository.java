@@ -14,7 +14,7 @@ public interface PaymentRepository extends JpaRepository<Payment, String> {
     List<Payment> findByStatus(PaymentStatus status);
 
     List<Payment> findBySenderBankIdOrReceiverBankId(String senderId, String receiverId);
-
+    List<Payment> findBySenderBankIdAndStatus(String senderBankId, PaymentStatus status);
     @Query("""
     SELECT p FROM Payment p
     WHERE (p.senderBankId = :bankId OR p.receiverBankId = :bankId)

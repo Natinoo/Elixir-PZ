@@ -1,4 +1,5 @@
 // SORBNET — panel pracownika banku.
+   
 
 const WS_ENDPOINT = "/ws"; 
 const BLOCK_AFTER_MS = 2 * 60 * 60 * 1000; // 2 h od przekroczenia limitu do automatycznej blokady
@@ -35,18 +36,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 async function loadBanks() {
   const accounts = await getJson("/api/sorbnet/accounts");
-  banksCache = accounts.filter(a => !a.serviceCode || a.serviceCode === "SORBNET");
+  // tylko uczestnicy SORBNET (bez ewentualnego lustra ELIXIR i bez NBP, którego nie ma w bazie)
+  banksCache = accounts.filter(a => (!a.serviceCode || a.serviceCode === "SORBNET") && a.bankId !== "NBP");
 
   const bankSel = $("bankSelect");
   const srcSel = $("depositSource");
   bankSel.innerHTML = "";
-  srcSel.innerHTML = "";
+  // NBP — bank centralny, nieskończone źródło; nie jest uczestnikiem, więc tylko jako źródło zasilenia
+  srcSel.innerHTML = '<option value="NBP">NBP — bank centralny (nieskończone środki)</option>';
 
   for (const a of banksCache) {
-    if (a.bankId !== "NBP") {
-      bankSel.appendChild(new Option(`${a.bankId} — ${a.bankName}`, a.bankId));
-    }
-    srcSel.appendChild(new Option(a.bankId === "NBP" ? "NBP (bank centralny)" : a.bankId, a.bankId));
+    bankSel.appendChild(new Option(`${a.bankId} — ${a.bankName}`, a.bankId));
+    srcSel.appendChild(new Option(`${a.bankId} — ${a.bankName}`, a.bankId));
   }
   srcSel.value = "NBP";
 
@@ -84,11 +85,19 @@ async function refreshStatus() {
   setMoney("availableCredit", s.availableCredit);
   setMoney("minDeposit", s.minDepositToRestore, false);
 
+  // wstrzymane w gridlocku — pokazuj tylko gdy > 0
+  const heldEl = $("heldAmount");
+  if (heldEl) {
+    const held = Number(s.heldAmount || 0);
+    heldEl.textContent = held > 0 ? fmtPLN.format(held) + " PLN" : "—";
+    heldEl.classList.toggle("neg", held > 0);
+  }
+
   const pill = $("bankStatus");
   pill.className = "status-pill";
   if (s.blocked) {
     pill.classList.add("blocked"); pill.textContent = "ZABLOKOWANY";
-  } else if (s.overlimitSince) {
+  } else if (s.overlimit || s.overlimitSince) {
     pill.classList.add("danger"); pill.textContent = "PONAD LIMITEM";
   } else if (Number(s.availableCredit) < Number(s.debtLimit) * 0.2) {
     pill.classList.add("warn"); pill.textContent = "NISKA PŁYNNOŚĆ";
@@ -114,17 +123,22 @@ function updateStrip(s) {
     return;
   }
 
-  if (s.overlimitSince) {
+  if (s.overlimit || s.overlimitSince) {
     strip.classList.add("danger");
-    $("stripStatus").textContent = "PRZEKROCZONY LIMIT ZADŁUŻENIA";
-    detail.textContent = `wymagana wpłata min. ${fmtPLN.format(s.minDepositToRestore)} PLN`;
+    $("stripStatus").textContent = "PRZELEW WSTRZYMANY — PRZEKROCZONY LIMIT";
+    const held = Number(s.heldAmount || 0);
+    detail.textContent = held > 0
+      ? `wstrzymane ${fmtPLN.format(held)} PLN · dopłać min. ${fmtPLN.format(s.minDepositToRestore)} PLN, aby rozliczyć`
+      : `wymagana wpłata min. ${fmtPLN.format(s.minDepositToRestore)} PLN`;
+
     cd.hidden = false;
-    const deadline = new Date(s.overlimitSince).getTime() + BLOCK_AFTER_MS;
+    // deadline z backendu (uwzględnia block-after-hours/minutes z properties); fallback na stałą
+    const deadline = s.blockedIfNotResolvedBy
+      ? new Date(s.blockedIfNotResolvedBy).getTime()
+      : new Date(s.overlimitSince).getTime() + BLOCK_AFTER_MS;
     const tick = () => {
       const left = deadline - Date.now();
-      cd.textContent = left > 0
-        ? `blokada za ${fmtClock(left)}`
-        : "blokada automatyczna w toku";
+      cd.textContent = left > 0 ? `blokada za ${fmtClock(left)}` : "blokada automatyczna w toku";
       if (left <= 0) clearInterval(countdownTimer);
     };
     tick();
@@ -285,7 +299,7 @@ async function loadLiquidity() {
               <span class="liq-service">· ${esc(r.requestingServiceCode)}</span></span>
         <span class="liq-amount">${fmtPLN.format(r.amount)} ${esc(r.currency)}</span>
       </div>
-      <p class="liq-msg">${esc(r.message || "Brak płynności w sesji")} · sesja ${esc(r.sessionId || "—")}</p>
+      <p class="liq-msg">${esc(r.message || "Brak płynności w sesji")} · ref. ${esc(r.sessionId || r.originPaymentId || "—")}</p>
       <div class="liq-actions"></div>`;
 
     const actions = el.querySelector(".liq-actions");
