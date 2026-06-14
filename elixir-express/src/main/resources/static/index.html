@@ -144,9 +144,12 @@
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Bank</th><th>Nazwa</th><th>Saldo</th><th>Limit zadłużenia</th><th>Status</th><th>Od kiedy poniżej limitu</th><th>Akcje</th></tr>
+                  <tr>
+                    <th>Bank</th><th>Nazwa</th><th>Saldo</th><th>Limit zadłużenia</th><th>Dostępne</th>
+                    <th>Held</th><th>Min. zasilenie</th><th>Status</th><th>Od kiedy</th><th>Akcje</th>
+                  </tr>
                 </thead>
-                <tbody id="accountsTableBody"><tr><td colspan="7">Ładowanie...</td></tr></tbody>
+                <tbody id="accountsTableBody"><tr><td colspan="10">Ładowanie...</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -227,7 +230,8 @@
       return {
         paymentId: getTag(xmlDoc, 'paymentId'),
         status: getTag(xmlDoc, 'status'),
-        message: getTag(xmlDoc, 'message')
+        message: getTag(xmlDoc, 'message'),
+        requiredTopUp: getTag(xmlDoc, 'requiredTopUp')
       };
     }
 
@@ -313,7 +317,7 @@
         if (!response.ok) throw new Error(parseXmlResponse(responseText).message || `HTTP ${response.status}`);
         const parsed = parseXmlResponse(responseText);
         message.className = parsed.status === 'GRIDLOCK_HELD' ? 'message warn' : 'message ok';
-        message.textContent = `✅ ${parsed.paymentId || 'wysłano'} (${parsed.status || 'QUEUED'}) ${parsed.message ? '- ' + parsed.message : ''}`;
+        message.textContent = `✅ ${parsed.paymentId || 'wysłano'} (${parsed.status || 'QUEUED'}) ${parsed.message ? '- ' + parsed.message : ''}${parsed.requiredTopUp ? ' Wymagane zasilenie: ' + parsed.requiredTopUp + ' PLN.' : ''}`;
         document.getElementById('amount').value = '';
         document.getElementById('title').value = '';
         await Promise.all([loadPayments(), loadAccounts()]);
@@ -343,36 +347,98 @@
     async function loadAccounts() {
       const tbody = document.getElementById('accountsTableBody');
       if (!tbody) return;
-      tbody.innerHTML = '<tr><td colspan="7">Ładowanie...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10">Ładowanie...</td></tr>';
       try {
-        const response = await fetch(`${API_BASE}/api/express/accounts`);
-        const accounts = await response.json();
+        const [accountsResponse, heldResponse] = await Promise.all([
+          fetch(`${API_BASE}/api/express/accounts`),
+          fetch(`${API_BASE}/api/express/payments/status/GRIDLOCK_HELD`)
+        ]);
+
+        const accounts = await accountsResponse.json();
+        const heldPayments = heldResponse.ok ? await heldResponse.json() : [];
+        const heldByBank = groupHeldPaymentsBySenderBank(Array.isArray(heldPayments) ? heldPayments : []);
+
         if (!Array.isArray(accounts) || accounts.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="7">Brak kont banków.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="10">Brak kont banków.</td></tr>';
           return;
         }
+
         tbody.innerHTML = accounts.map(a => {
-          const over = Number(a.balance) < -Number(a.debtLimit);
+          const balance = Number(a.balance || 0);
+          const debtLimit = Number(a.debtLimit || 0);
+          const available = balance + debtLimit;
+          const held = heldByBank[a.bankId] || { count: 0, amount: 0 };
+          const requiredTopUp = Math.max(0, held.amount - available);
+          const actuallyOverLimit = balance < -debtLimit;
+          const waiting = held.count > 0;
+          const status = a.blocked ? 'ZABLOKOWANY' : waiting ? 'GRIDLOCK' : actuallyOverLimit ? 'POZA LIMITEM' : 'AKTYWNY';
+          const statusClassName = a.blocked ? 'blocked' : waiting ? 'rejected' : actuallyOverLimit ? 'rejected' : 'processed';
+
           return `<tr>
             <td>${escapeHtml(a.bankId)}</td>
             <td>${escapeHtml(a.bankName)}</td>
-            <td>${formatMoney(a.balance, 'PLN')}</td>
-            <td>${formatMoney(-Number(a.debtLimit || 0), 'PLN')}</td>
-            <td><span class="status ${a.blocked ? 'blocked' : over ? 'rejected' : 'processed'}">${a.blocked ? 'ZABLOKOWANY' : over ? 'POZA LIMITEM' : 'AKTYWNY'}</span></td>
+            <td>${formatMoney(balance, 'PLN')}</td>
+            <td>${formatMoney(-debtLimit, 'PLN')}</td>
+            <td>${formatMoney(available, 'PLN')}</td>
+            <td>${held.count ? `${held.count} / ${formatMoney(held.amount, 'PLN')}` : '-'}</td>
+            <td>${requiredTopUp > 0 ? formatMoney(requiredTopUp, 'PLN') : '-'}</td>
+            <td><span class="status ${statusClassName}">${status}</span></td>
             <td>${escapeHtml(formatDate(a.overlimitSince))}</td>
-            <td class="actions"><input id="topup-${escapeHtml(a.bankId)}" type="number" step="0.01" placeholder="Kwota"/><button class="secondary" onclick="topUpBank('${escapeHtml(a.bankId)}')">Zasil</button><button class="secondary" onclick="unblockBank('${escapeHtml(a.bankId)}')">Odblokuj</button></td>
+            <td class="actions">
+              <input id="topup-${escapeHtml(a.bankId)}" data-required-topup="${requiredTopUp.toFixed(2)}" type="number" step="0.01" placeholder="Kwota"/>
+              <button class="secondary" onclick="fillTopUpToLimit('${escapeHtml(a.bankId)}')">Do limitu</button>
+              <button class="secondary" onclick="topUpBank('${escapeHtml(a.bankId)}')">Zasil</button>
+              <button class="secondary" onclick="unblockBank('${escapeHtml(a.bankId)}')">Odblokuj</button>
+            </td>
           </tr>`;
         }).join('');
       } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="7">Błąd ładowania kont: ${escapeHtml(e.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10">Błąd ładowania kont: ${escapeHtml(e.message)}</td></tr>`;
       }
+    }
+
+    function groupHeldPaymentsBySenderBank(payments) {
+      const result = {};
+      payments.forEach(p => {
+        const bank = p.senderBankId;
+        if (!bank) return;
+        if (!result[bank]) result[bank] = { count: 0, amount: 0 };
+        result[bank].count += 1;
+        result[bank].amount += Number(p.amount || 0);
+      });
+      return result;
+    }
+
+    function fillTopUpToLimit(bankId) {
+      const input = document.getElementById(`topup-${bankId}`);
+      if (!input) return;
+      const required = Number(input.dataset.requiredTopup || 0);
+      if (required <= 0) {
+        alert('Ten bank nie ma obecnie zatrzymanych przelewów wymagających zasilenia.');
+        return;
+      }
+      input.value = required.toFixed(2);
     }
 
     async function topUpBank(bankId) {
       const input = document.getElementById(`topup-${bankId}`);
       const amount = input?.value;
+      const required = Number(input?.dataset.requiredTopup || 0);
+
       if (!amount || Number(amount) <= 0) return alert('Podaj poprawną kwotę.');
-      await fetch(`${API_BASE}/api/express/accounts/${bankId}/topup?amount=${encodeURIComponent(amount)}`, { method: 'POST' });
+      if (required > 0 && Number(amount) > required + 0.005) {
+        return alert(`Dla tego gridlocka maksymalna dopłata do dolnego limitu to ${formatMoney(required, 'PLN')}. Użyj przycisku „Do limitu”.`);
+      }
+      if (required > 0 && Number(amount) < required && !confirm(`Ta kwota jest mniejsza niż wymagane ${formatMoney(required, 'PLN')}. Przelew prawdopodobnie dalej zostanie w GRIDLOCK_HELD. Kontynuować?`)) {
+        return;
+      }
+
+      const response = await fetch(`${API_BASE}/api/express/accounts/${bankId}/topup?amount=${encodeURIComponent(amount)}`, { method: 'POST' });
+      if (!response.ok) {
+        const text = await response.text();
+        alert(`Błąd zasilenia: ${text || 'HTTP ' + response.status}`);
+        return;
+      }
       await Promise.all([loadAccounts(), loadPayments()]);
     }
 

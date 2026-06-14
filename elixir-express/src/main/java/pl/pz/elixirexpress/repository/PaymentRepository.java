@@ -9,4 +9,5 @@ import java.util.List;
 public interface PaymentRepository extends JpaRepository<Payment, String> {
     List<Payment> findByStatus(PaymentStatus status);
     List<Payment> findBySenderBankIdAndStatus(String senderBankId, PaymentStatus status);
+    boolean existsBySenderBankIdAndStatus(String senderBankId, PaymentStatus status);
 }

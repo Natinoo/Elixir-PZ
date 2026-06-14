@@ -22,12 +22,19 @@ public class BankAccount {
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal balance = BigDecimal.ZERO;
 
+    /**
+     * Dodatni limit zadłużenia, np. 30 000 000 oznacza, że bank może zejść do -30 000 000.
+     */
     @Column(name = "debt_limit", nullable = false, precision = 19, scale = 2)
     private BigDecimal debtLimit = BigDecimal.ZERO;
 
     @Column(nullable = false)
     private boolean blocked = false;
 
+    /**
+     * Moment pierwszego zatrzymania płatności z powodu braku płynności.
+     * W Expressie saldo nie musi fizycznie spaść poniżej limitu, bo przelew jest zatrzymany przed księgowaniem.
+     */
     @Column(name = "overlimit_since")
     private LocalDateTime overlimitSince;
 
@@ -102,10 +109,23 @@ public class BankAccount {
     }
 
     public BigDecimal lowestAllowedBalance() {
-        return debtLimit == null ? BigDecimal.ZERO : debtLimit.negate();
+        return safe(debtLimit).negate();
+    }
+
+    public BigDecimal availableForDebit() {
+        return safe(balance).add(safe(debtLimit));
     }
 
     public boolean isOverLimit() {
-        return balance != null && balance.compareTo(lowestAllowedBalance()) < 0;
+        return safe(balance).compareTo(lowestAllowedBalance()) < 0;
+    }
+
+    public BigDecimal missingToRestoreActualBalance() {
+        BigDecimal missing = lowestAllowedBalance().subtract(safe(balance));
+        return missing.max(BigDecimal.ZERO);
+    }
+
+    private BigDecimal safe(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 }

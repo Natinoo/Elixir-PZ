@@ -61,7 +61,7 @@ public class ExpressPaymentService {
             payment.setStatus(PaymentStatus.GRIDLOCK_HELD);
             payment.setHeldReason("System Express jest w trybie gridlock/emergency.");
             paymentRepository.save(payment);
-            return response(payment, payment.getHeldReason());
+            return response(payment, payment.getHeldReason(), BigDecimal.ZERO);
         }
 
         BankAccount sender = getBank(paymentDto.getSenderBankId());
@@ -71,23 +71,32 @@ public class ExpressPaymentService {
             payment.setStatus(PaymentStatus.BLOCKED);
             payment.setHeldReason("Bank nadawcy jest zablokowany.");
             paymentRepository.save(payment);
-            return response(payment, payment.getHeldReason());
+            return response(payment, payment.getHeldReason(), BigDecimal.ZERO);
         }
 
-        if (!hasLiquidityForDebit(sender, paymentDto.getAmount())) {
-            sender.setOverlimitSince(sender.getOverlimitSince() == null ? LocalDateTime.now() : sender.getOverlimitSince());
-            bankAccountRepository.save(sender);
+        if (receiver.isBlocked()) {
+            payment.setStatus(PaymentStatus.BLOCKED);
+            payment.setHeldReason("Bank odbiorcy jest zablokowany.");
+            paymentRepository.save(payment);
+            return response(payment, payment.getHeldReason(), BigDecimal.ZERO);
+        }
+
+        BigDecimal requiredTopUp = requiredTopUpForPayment(sender, paymentDto.getAmount());
+        if (requiredTopUp.compareTo(BigDecimal.ZERO) > 0) {
+            markBankWaitingForLiquidity(sender);
 
             payment.setStatus(PaymentStatus.GRIDLOCK_HELD);
-            payment.setHeldReason("Przelew zatrzymany: bank przekroczyłby limit zadłużenia w EXPRESS. Wysłano request płynnościowy do SORBNETU.");
+            payment.setHeldReason("Przelew zatrzymany: bank przekroczyłby limit zadłużenia w EXPRESS. "
+                    + "Minimalne wymagane zasilenie do limitu: " + formatAmount(requiredTopUp) + " PLN.");
             paymentRepository.save(payment);
 
-            sendLiquidityRequest(payment, sender);
+            sendLiquidityRequest(payment, sender, requiredTopUp);
 
-            log.warn("EXPRESS payment held due to liquidity: paymentId={}, bank={}, balance={}, limit={}, amount={}",
-                    payment.getPaymentId(), sender.getBankId(), sender.getBalance(), sender.getDebtLimit(), payment.getAmount());
+            log.warn("EXPRESS payment held due to liquidity: paymentId={}, bank={}, balance={}, debtLimit={}, amount={}, available={}, requiredTopUp={}",
+                    payment.getPaymentId(), sender.getBankId(), sender.getBalance(), sender.getDebtLimit(),
+                    payment.getAmount(), availableForDebit(sender), requiredTopUp);
 
-            return response(payment, payment.getHeldReason());
+            return response(payment, payment.getHeldReason(), requiredTopUp);
         }
 
         applyExpressDebitCredit(sender, receiver, paymentDto.getAmount());
@@ -100,7 +109,7 @@ public class ExpressPaymentService {
                 payment.getPaymentId(), payment.getSenderBankId(), payment.getReceiverBankId(), payment.getAmount(),
                 sender.getBalance(), receiver.getBalance());
 
-        return response(payment, "Przelew express rozliczony lokalnie w systemie Express.");
+        return response(payment, "Przelew express rozliczony lokalnie w systemie Express.", BigDecimal.ZERO);
     }
 
     @Transactional
@@ -113,7 +122,12 @@ public class ExpressPaymentService {
         BankAccount sender = getBank(payment.getSenderBankId());
         BankAccount receiver = getBank(payment.getReceiverBankId());
 
-        if (sender.isBlocked() || !hasLiquidityForDebit(sender, payment.getAmount())) {
+        if (sender.isBlocked() || receiver.isBlocked()) {
+            return false;
+        }
+
+        if (requiredTopUpForPayment(sender, payment.getAmount()).compareTo(BigDecimal.ZERO) > 0) {
+            markBankWaitingForLiquidity(sender);
             return false;
         }
 
@@ -123,6 +137,7 @@ public class ExpressPaymentService {
         payment.setHeldReason(null);
         paymentRepository.save(payment);
 
+        refreshLiquidityMarkerAfterRetry(sender.getBankId());
         log.info("Held EXPRESS payment retried and settled locally: {}", payment.getPaymentId());
         return true;
     }
@@ -152,13 +167,31 @@ public class ExpressPaymentService {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Kwota zasilenia musi być większa od zera.");
         }
-        BankAccount bank = getBank(bankId);
-        bank.setBalance(bank.getBalance().add(amount));
-        refreshOverlimitMarker(bank);
-        bankAccountRepository.save(bank);
 
-        retryHeldPaymentsForBank(bankId);
-        return bank;
+        BankAccount bank = getBank(bankId);
+        BigDecimal requiredTopUp = requiredTopUpForHeldPayments(bank);
+
+        if (requiredTopUp.compareTo(BigDecimal.ZERO) > 0 && amount.compareTo(requiredTopUp) > 0) {
+            throw new IllegalArgumentException("Zasilenie przekracza minimalną kwotę wymaganą do powrotu do limitu. "
+                    + "Maksymalnie wpisz: " + formatAmount(requiredTopUp) + " PLN.");
+        }
+
+        bank.setBalance(bank.getBalance().add(amount));
+
+        if (bank.isBlocked() && requiredTopUpForHeldPayments(bank).compareTo(BigDecimal.ZERO) == 0 && !bank.isOverLimit()) {
+            bank.setBlocked(false);
+            bank.setBlockedAt(null);
+            log.info("EXPRESS bank automatically unblocked after top-up: {}", bankId);
+        }
+
+        bankAccountRepository.save(bank);
+        int retried = retryHeldPaymentsForBank(bankId);
+        refreshLiquidityMarkerAfterRetry(bankId);
+
+        BankAccount refreshed = getBank(bankId);
+        log.info("EXPRESS bank top-up: bank={}, amount={}, balance={}, retriedHeldPayments={}",
+                bankId, amount, refreshed.getBalance(), retried);
+        return refreshed;
     }
 
     @Transactional
@@ -166,19 +199,24 @@ public class ExpressPaymentService {
         BankAccount bank = getBank(bankId);
         bank.setBlocked(false);
         bank.setBlockedAt(null);
-        refreshOverlimitMarker(bank);
         bankAccountRepository.save(bank);
-        retryHeldPaymentsForBank(bankId);
-        return bank;
+
+        int retried = retryHeldPaymentsForBank(bankId);
+        refreshLiquidityMarkerAfterRetry(bankId);
+
+        log.info("EXPRESS bank unblocked manually: bank={}, retriedHeldPayments={}", bankId, retried);
+        return getBank(bankId);
     }
 
     @Transactional
     public void blockBank(String bankId) {
         BankAccount bank = getBank(bankId);
-        bank.setBlocked(true);
-        bank.setBlockedAt(LocalDateTime.now());
-        bankAccountRepository.save(bank);
-        log.warn("EXPRESS bank blocked: {}", bankId);
+        if (!bank.isBlocked()) {
+            bank.setBlocked(true);
+            bank.setBlockedAt(LocalDateTime.now());
+            bankAccountRepository.save(bank);
+            log.warn("EXPRESS bank blocked: {}", bankId);
+        }
     }
 
     @Transactional
@@ -261,25 +299,64 @@ public class ExpressPaymentService {
     private void applyExpressDebitCredit(BankAccount sender, BankAccount receiver, BigDecimal amount) {
         sender.setBalance(sender.getBalance().subtract(amount));
         receiver.setBalance(receiver.getBalance().add(amount));
-        refreshOverlimitMarker(sender);
-        refreshOverlimitMarker(receiver);
+        refreshActualOverlimitMarker(sender);
+        refreshActualOverlimitMarker(receiver);
         bankAccountRepository.save(sender);
         bankAccountRepository.save(receiver);
     }
 
-    private boolean hasLiquidityForDebit(BankAccount sender, BigDecimal amount) {
-        BigDecimal projectedBalance = sender.getBalance().subtract(amount);
-        return projectedBalance.compareTo(sender.lowestAllowedBalance()) >= 0;
+    private BigDecimal requiredTopUpForPayment(BankAccount sender, BigDecimal amount) {
+        BigDecimal missing = safe(amount).subtract(availableForDebit(sender));
+        return missing.max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
     }
 
-    private void refreshOverlimitMarker(BankAccount bank) {
+    private BigDecimal requiredTopUpForHeldPayments(BankAccount bank) {
+        List<Payment> held = paymentRepository.findBySenderBankIdAndStatus(bank.getBankId(), PaymentStatus.GRIDLOCK_HELD);
+        BigDecimal heldAmount = held.stream()
+                .map(Payment::getAmount)
+                .map(this::safe)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal missing = heldAmount.subtract(availableForDebit(bank));
+        return missing.max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal availableForDebit(BankAccount sender) {
+        return safe(sender.getBalance()).add(safe(sender.getDebtLimit()));
+    }
+
+    private void markBankWaitingForLiquidity(BankAccount bank) {
+        if (bank.getOverlimitSince() == null) {
+            bank.setOverlimitSince(LocalDateTime.now());
+        }
+        bankAccountRepository.save(bank);
+    }
+
+    private void refreshActualOverlimitMarker(BankAccount bank) {
         if (bank.isOverLimit()) {
+            if (bank.getOverlimitSince() == null) {
+                bank.setOverlimitSince(LocalDateTime.now());
+            }
+        } else if (!paymentRepository.existsBySenderBankIdAndStatus(bank.getBankId(), PaymentStatus.GRIDLOCK_HELD)) {
+            bank.setOverlimitSince(null);
+        }
+    }
+
+    private void refreshLiquidityMarkerAfterRetry(String bankId) {
+        BankAccount bank = getBank(bankId);
+        boolean stillHeld = paymentRepository.existsBySenderBankIdAndStatus(bankId, PaymentStatus.GRIDLOCK_HELD);
+        if (stillHeld || bank.isOverLimit()) {
             if (bank.getOverlimitSince() == null) {
                 bank.setOverlimitSince(LocalDateTime.now());
             }
         } else {
             bank.setOverlimitSince(null);
+            if (bank.isBlocked()) {
+                bank.setBlocked(false);
+                bank.setBlockedAt(null);
+                log.info("EXPRESS bank automatically unblocked after liquidity restored: {}", bankId);
+            }
         }
+        bankAccountRepository.save(bank);
     }
 
     private BankAccount getBank(String bankId) {
@@ -287,12 +364,13 @@ public class ExpressPaymentService {
                 .orElseThrow(() -> new IllegalArgumentException("Nieznany bank: " + bankId));
     }
 
-    private Map<String, Object> response(Payment payment, String message) {
+    private Map<String, Object> response(Payment payment, String message, BigDecimal requiredTopUp) {
         return Map.of(
                 "paymentId", payment.getPaymentId(),
                 "status", payment.getStatus().name(),
                 "channel", SERVICE_CODE,
-                "message", message
+                "message", message,
+                "requiredTopUp", formatAmount(requiredTopUp)
         );
     }
 
@@ -338,18 +416,21 @@ public class ExpressPaymentService {
         }
     }
 
-    private void sendLiquidityRequest(Payment payment, BankAccount sender) {
-        BigDecimal projectedBalance = sender.getBalance().subtract(payment.getAmount());
-        BigDecimal missingAmount = sender.lowestAllowedBalance().subtract(projectedBalance);
-        if (missingAmount.compareTo(BigDecimal.ZERO) < 0) {
-            missingAmount = BigDecimal.ZERO;
-        }
-
-        String requestId = "LIQ-EXPRESS-" + payment.getPaymentId() + "-" + sender.getBankId();
+    private void sendLiquidityRequest(Payment payment, BankAccount sender, BigDecimal missingAmount) {
+        String requestId = buildLiquidityRequestId(payment, sender);
         String payload = toLiquidityRequestXml(requestId, payment, sender, missingAmount);
         kafkaTemplate.send("liquidity.requests.express.sorbnet", requestId, payload);
         log.warn("EXPRESS liquidity request sent to SORBNET: requestId={}, paymentId={}, bank={}, amount={}",
                 requestId, payment.getPaymentId(), sender.getBankId(), missingAmount);
+    }
+
+    private String buildLiquidityRequestId(Payment payment, BankAccount sender) {
+        String id = payment.getPaymentId() == null ? UUID.randomUUID().toString() : payment.getPaymentId();
+        String compact = id.replace("EXP-", "").replace("-", "");
+        if (compact.length() > 12) {
+            compact = compact.substring(0, 12);
+        }
+        return "LIQ-EXP-" + sender.getBankId() + "-" + compact;
     }
 
     private String toLiquidityRequestXml(String requestId, Payment payment, BankAccount sender, BigDecimal missingAmount) {
@@ -367,11 +448,13 @@ public class ExpressPaymentService {
                             <BankId>%s</BankId>
                             <SourceServiceCode>SORBNET</SourceServiceCode>
                             <TargetServiceCode>EXPRESS</TargetServiceCode>
+                            <SourceAccount>SORBNET-%s</SourceAccount>
                             <TargetAccount>EXPRESS-%s</TargetAccount>
                             <Amt Ccy="%s">%s</Amt>
                             <Reason>%s</Reason>
                             <CurrentBalance>%s</CurrentBalance>
                             <DebtLimit>%s</DebtLimit>
+                            <AvailableForDebit>%s</AvailableForDebit>
                             <ApprovalStatus>PENDING_BANK_APPROVAL</ApprovalStatus>
                         </TrfInstr>
                     </LiquidityCreditTransferRequest>
@@ -383,46 +466,23 @@ public class ExpressPaymentService {
                 escapeXml(payment.getPaymentId()),
                 escapeXml(sender.getBankId()),
                 escapeXml(sender.getBankId()),
+                escapeXml(sender.getBankId()),
                 escapeXml(payment.getCurrency()),
                 escapeXml(formatAmount(missingAmount)),
-                escapeXml("Brak płynności w Elixir Express dla przelewu " + payment.getPaymentId()),
+                escapeXml("Brak płynności w Elixir Express dla przelewu " + payment.getPaymentId()
+                        + ". Minimalne zasilenie do limitu: " + formatAmount(missingAmount) + " PLN."),
                 escapeXml(formatAmount(sender.getBalance())),
-                escapeXml(formatAmount(sender.getDebtLimit()))
-        ).trim();
-    }
-
-    private String toPaymentXml(Payment payment) {
-        return """
-                <?xml version="1.0" encoding="UTF-8"?>
-                <Payment>
-                    <paymentId>%s</paymentId>
-                    <amount>%s</amount>
-                    <currency>%s</currency>
-                    <senderName>%s</senderName>
-                    <receiverName>%s</receiverName>
-                    <senderBankId>%s</senderBankId>
-                    <receiverBankId>%s</receiverBankId>
-                    <senderAccount>%s</senderAccount>
-                    <receiverAccount>%s</receiverAccount>
-                    <title>%s</title>
-                    <type>EXPRESS</type>
-                </Payment>
-                """.formatted(
-                escapeXml(payment.getPaymentId()),
-                escapeXml(formatAmount(payment.getAmount())),
-                escapeXml(payment.getCurrency()),
-                escapeXml(payment.getSenderName()),
-                escapeXml(payment.getReceiverName()),
-                escapeXml(payment.getSenderBankId()),
-                escapeXml(payment.getReceiverBankId()),
-                escapeXml(payment.getSenderAccount()),
-                escapeXml(payment.getReceiverAccount()),
-                escapeXml(payment.getTitle())
+                escapeXml(formatAmount(sender.getDebtLimit())),
+                escapeXml(formatAmount(availableForDebit(sender)))
         ).trim();
     }
 
     private String formatAmount(BigDecimal amount) {
         return amount == null ? "0.00" : amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private BigDecimal safe(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     private boolean isBlank(String value) {

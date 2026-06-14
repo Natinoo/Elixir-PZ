@@ -13,7 +13,9 @@ import pl.pz.elixirexpress.repository.BankAccountRepository;
 import pl.pz.elixirexpress.repository.PaymentRepository;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class GridlockResolutionService {
@@ -26,6 +28,13 @@ public class GridlockResolutionService {
 
     @Value("${elixir-express.overlimit.block-after-hours:2}")
     private int blockAfterHours;
+
+    /**
+     * Wygodne do demo. Jeżeli > 0, ma priorytet nad godzinami.
+     * Przykład: elixir-express.overlimit.block-after-minutes=2
+     */
+    @Value("${elixir-express.overlimit.block-after-minutes:0}")
+    private long blockAfterMinutes;
 
     public GridlockResolutionService(PaymentRepository paymentRepository,
                                      BankAccountRepository bankAccountRepository,
@@ -55,13 +64,26 @@ public class GridlockResolutionService {
         }
     }
 
-    @Scheduled(fixedDelay = 60_000)
+    @Scheduled(fixedDelayString = "${elixir-express.gridlock.interval-ms:30000}")
     @Transactional
     public void autoBlockOverlimitBanks() {
-        LocalDateTime cutoff = LocalDateTime.now().minusHours(blockAfterHours);
+        LocalDateTime cutoff = blockAfterMinutes > 0
+                ? LocalDateTime.now().minusMinutes(blockAfterMinutes)
+                : LocalDateTime.now().minusHours(blockAfterHours);
 
-        for (BankAccount bank : bankAccountRepository.findOverLimit()) {
-            if (bank.isBlocked()) {
+        Set<String> candidateBankIds = new HashSet<>();
+
+        for (Payment payment : paymentRepository.findByStatus(PaymentStatus.GRIDLOCK_HELD)) {
+            candidateBankIds.add(payment.getSenderBankId());
+        }
+
+        for (BankAccount account : bankAccountRepository.findOverLimit()) {
+            candidateBankIds.add(account.getBankId());
+        }
+
+        for (String bankId : candidateBankIds) {
+            BankAccount bank = bankAccountRepository.findById(bankId).orElse(null);
+            if (bank == null || bank.isBlocked()) {
                 continue;
             }
 
@@ -70,8 +92,10 @@ public class GridlockResolutionService {
                 bank.setBlockedAt(LocalDateTime.now());
                 bankAccountRepository.save(bank);
 
-                log.warn("EXPRESS bank automatically blocked after liquidity timeout: bankId={}, balance={}, limit={}",
-                        bank.getBankId(), bank.getBalance(), bank.getDebtLimit());
+                log.warn("EXPRESS bank automatically blocked after liquidity timeout: bankId={}, balance={}, debtLimit={}, overlimitSince={}, timeout={}{}",
+                        bank.getBankId(), bank.getBalance(), bank.getDebtLimit(), bank.getOverlimitSince(),
+                        blockAfterMinutes > 0 ? blockAfterMinutes : blockAfterHours,
+                        blockAfterMinutes > 0 ? " minutes" : " hours");
             }
         }
     }
