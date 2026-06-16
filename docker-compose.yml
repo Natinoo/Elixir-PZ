@@ -67,11 +67,14 @@ services:
           bin/yugabyted start --daemon=false --initial_scripts_dir=/var/ybinit
           '
     healthcheck:
-      test: ["CMD-SHELL", "bin/ysqlsh -h $(hostname -i) -U yugabyte -d yugabyte -tAc 'SELECT 1' >/dev/null 2>&1"]
-      interval: 10s
+      # Czeka aż WSZYSTKIE trzy bazy (tworzone przez initial_scripts_dir) odpowiadają,
+      # a nie tylko domyślna baza "yugabyte". Dzięki temu service_healthy zazieleni się
+      # dopiero, gdy sorbnet/elixir/express realnie przyjmują połączenia.
+      test: ["CMD-SHELL", "bin/ysqlsh -h $(hostname -i) -U yugabyte -d sorbnet -tAc 'SELECT 1' >/dev/null 2>&1 && bin/ysqlsh -h $(hostname -i) -U yugabyte -d elixir -tAc 'SELECT 1' >/dev/null 2>&1 && bin/ysqlsh -h $(hostname -i) -U yugabyte -d express -tAc 'SELECT 1' >/dev/null 2>&1"]
+      interval: 5s
       timeout: 10s
-      retries: 30
-      start_period: 60s
+      retries: 40
+      start_period: 90s
     volumes:
       - yugabyte_data:/home/yugabyte/var
 
@@ -99,6 +102,8 @@ services:
     depends_on:
       kafka-init:
         condition: service_completed_successfully
+      yugabyte:
+        condition: service_healthy
     environment:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPRING_DATASOURCE_URL: jdbc:postgresql://yugabyte:5433/express
